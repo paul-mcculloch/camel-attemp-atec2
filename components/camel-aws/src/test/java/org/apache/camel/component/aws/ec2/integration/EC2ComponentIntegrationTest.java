@@ -16,16 +16,16 @@
  */
 package org.apache.camel.component.aws.ec2.integration;
 
-import java.util.List;
-
+import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.aws.ec2.EC2Constants;
 import org.apache.camel.test.junit4.CamelTestSupport;
+import org.junit.Ignore;
 import org.junit.Test;
 
-//@Ignore("Must be manually tested. Provide your own accessKey and secretKey!")
+@Ignore("Must be manually tested. Provide your own accessKey and secretKey!")
 public class EC2ComponentIntegrationTest extends CamelTestSupport {
     
     @Test
@@ -36,8 +36,8 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
             }
         });
         
-        List reservations = exchange.getIn().getHeader(EC2Constants.RESERVATIONS, List.class);
-        assertNotNull(reservations);
+        DescribeInstancesResult results = exchange.getIn().getHeader(EC2Constants.DESCRIBE_INSTANCES_RESULTS, DescribeInstancesResult.class);
+        assertNotNull(results);
     }
     
     @Override
@@ -46,7 +46,7 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
             @Override
             public void configure() throws Exception {
                 from("direct:start")
-                        .to("aws-ec2://DescribeInstances?accessKey=AKIAJHQX7AAYPQ44KB5Q&secretKey=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");
+                        .to("aws-ec2://DescribeInstances?accessKey=xx&secretKey=yy");
             }
         };
     }
