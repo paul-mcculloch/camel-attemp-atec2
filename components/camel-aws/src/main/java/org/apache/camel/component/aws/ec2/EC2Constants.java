@@ -23,6 +23,6 @@ public interface EC2Constants {
     
 
     String NEXT_TOKEN = "CamelAwsEC2NextToken";
-    String RESERVATIONS = "CamelAwsEC2Reservations";
+    String DESCRIBE_INSTANCES_RESULTS = "CamelAwsEC2DescribeInstanceResults";
     String OPERATION =  "CamelAwsEC2Operation";;
 }

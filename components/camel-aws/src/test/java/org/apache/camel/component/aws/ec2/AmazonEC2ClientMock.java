@@ -16,28 +16,30 @@
  */
 package org.apache.camel.component.aws.ec2;
 
+import com.amazonaws.AmazonClientException;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-import org.apache.camel.Exchange;
-import org.apache.camel.Message;
+import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.Reservation;
 
-public class DescribeInstancesCommand extends AbstractEC2Command {
+public class AmazonEC2ClientMock extends AmazonEC2Client {   
 
-    public DescribeInstancesCommand(AmazonEC2Client amazonEC2Client, EC2Configuration configuration, Exchange exchange) {
-        super(amazonEC2Client, configuration, exchange);
+    public AmazonEC2ClientMock() {
+        super(new BasicAWSCredentials("user", "secret"));
     }
-
-    public void execute() {
     
-        log.trace("Sending request [{}] for exchange [{}]...", exchange);
+    
+    @Override
+    public DescribeInstancesResult describeInstances() throws AmazonServiceException, AmazonClientException {
+        DescribeInstancesResult result = new DescribeInstancesResult();
         
-        DescribeInstancesResult result = this.ec2Client.describeInstances();
-        
-        Message msg = getMessageForResponse(exchange);
-        
-        msg.setHeader(EC2Constants.NEXT_TOKEN, result.getNextToken());
-        msg.setHeader(EC2Constants.DESCRIBE_INSTANCES_RESULTS, result);
-
+        result.withReservations(new Reservation().withInstances(new Instance().withInstanceId("someinstanceid")));
+        result.setNextToken("TOKEN2");
+        return result;
     }
+
+
 
 }
