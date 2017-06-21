@@ -17,6 +17,7 @@
 package org.apache.camel.component.aws.s3;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
@@ -24,11 +25,16 @@ import java.util.List;
 import java.util.Map;
 
 import com.amazonaws.services.cloudfront.model.InvalidArgumentException;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
 import com.amazonaws.services.s3.model.AccessControlList;
+import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
 import com.amazonaws.services.s3.model.CompleteMultipartUploadResult;
+import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.amazonaws.services.s3.model.CopyObjectResult;
+import com.amazonaws.services.s3.model.DeleteBucketRequest;
 import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.amazonaws.services.s3.model.InitiateMultipartUploadResult;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -41,13 +47,17 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.WrappedFile;
+import org.apache.camel.component.aws.ec2.EC2Constants;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.IOHelper;
+import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.URISupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.camel.component.aws.common.AwsExchangeUtil.getMessageForResponse;
 
 /**
  * A Producer which sends messages to the Amazon Web Service Simple Storage Service <a
@@ -57,6 +67,8 @@ public class S3Producer extends DefaultProducer {
 
     private static final Logger LOG = LoggerFactory.getLogger(S3Producer.class);
 
+    private transient String s3ProducerToString;
+    
     public S3Producer(final Endpoint endpoint) {
         super(endpoint);
     }
@@ -64,13 +76,28 @@ public class S3Producer extends DefaultProducer {
 
     @Override
     public void process(final Exchange exchange) throws Exception {
-        if (getConfiguration().isMultiPartUpload()) {
-            processMultiPart(exchange);
+        S3Operations operation = determineOperation(exchange);
+        if (ObjectHelper.isEmpty(operation)) {
+            if (getConfiguration().isMultiPartUpload()) {
+                processMultiPart(exchange);
+            } else {
+                processSingleOp(exchange);
+            }
         } else {
-            processSingleOp(exchange);
+            switch (operation) {
+            case copyObject:
+                copyObject(getEndpoint().getS3Client(), exchange);
+                break;
+            case listBuckets:
+                listBuckets(getEndpoint().getS3Client(), exchange);
+                break;
+            case deleteBucket:
+                deleteBucket(getEndpoint().getS3Client(), exchange);
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported operation");
+            }
         }
-
-
     }
 
     public void processMultiPart(final Exchange exchange) throws Exception {
@@ -170,6 +197,7 @@ public class S3Producer extends DefaultProducer {
         ObjectMetadata objectMetadata = determineMetadata(exchange);
 
         File filePayload = null;
+        InputStream is = null;
         Object obj = exchange.getIn().getMandatoryBody();
         PutObjectRequest putObjectRequest = null;
         // Need to check if the message body is WrappedFile
@@ -178,11 +206,12 @@ public class S3Producer extends DefaultProducer {
         }
         if (obj instanceof File) {
             filePayload = (File) obj;
-            putObjectRequest = new PutObjectRequest(getConfiguration().getBucketName(), determineKey(exchange), filePayload);
+            is = new FileInputStream(filePayload);
         } else {
-            putObjectRequest = new PutObjectRequest(getConfiguration().getBucketName(),
-                determineKey(exchange), exchange.getIn().getMandatoryBody(InputStream.class), objectMetadata);
+            is = exchange.getIn().getMandatoryBody(InputStream.class);
         }
+
+        putObjectRequest = new PutObjectRequest(getConfiguration().getBucketName(), determineKey(exchange), is, objectMetadata);
 
         String storageClass = determineStorageClass(exchange);
         if (storageClass != null) {
@@ -214,9 +243,81 @@ public class S3Producer extends DefaultProducer {
         }
 
         if (getConfiguration().isDeleteAfterWrite() && filePayload != null) {
+            // close streams
             IOHelper.close(putObjectRequest.getInputStream());
+            IOHelper.close(is);
             FileUtil.deleteFile(filePayload);
         }
+    }
+    
+    private void copyObject(AmazonS3 s3Client, Exchange exchange) {
+        String bucketNameDestination;
+        String destinationKey;
+        String sourceKey;
+        String bucketName;
+        String versionId;
+        
+        bucketName = exchange.getIn().getHeader(S3Constants.BUCKET_NAME, String.class);
+        if (ObjectHelper.isEmpty(bucketName)) {
+            bucketName = getConfiguration().getBucketName();
+        }
+        sourceKey = exchange.getIn().getHeader(S3Constants.KEY, String.class);
+        destinationKey = exchange.getIn().getHeader(S3Constants.DESTINATION_KEY, String.class);
+        bucketNameDestination = exchange.getIn().getHeader(S3Constants.BUCKET_DESTINATION_NAME, String.class);
+        versionId = exchange.getIn().getHeader(S3Constants.VERSION_ID, String.class);
+        
+        if (ObjectHelper.isEmpty(bucketName)) {
+            throw new IllegalArgumentException("Bucket Name must be specified for copyObject Operation");
+        }
+        if (ObjectHelper.isEmpty(bucketNameDestination)) {
+            throw new IllegalArgumentException("Bucket Name Destination must be specified for copyObject Operation");
+        }
+        if (ObjectHelper.isEmpty(sourceKey)) {
+            throw new IllegalArgumentException("Source Key must be specified for copyObject Operation");
+        }
+        if (ObjectHelper.isEmpty(destinationKey)) {
+            throw new IllegalArgumentException("Destination Key must be specified for copyObject Operation");
+        }
+        CopyObjectRequest copyObjectRequest;
+        if (ObjectHelper.isEmpty(versionId)) {
+            copyObjectRequest = new CopyObjectRequest(bucketName, sourceKey, bucketNameDestination, destinationKey);
+        } else {
+            copyObjectRequest = new CopyObjectRequest(bucketName, sourceKey, versionId, bucketNameDestination, destinationKey);
+        }
+        CopyObjectResult copyObjectResult = s3Client.copyObject(copyObjectRequest);
+        
+        Message message = getMessageForResponse(exchange);
+        message.setHeader(S3Constants.E_TAG, copyObjectResult.getETag());
+        if (copyObjectResult.getVersionId() != null) {
+            message.setHeader(S3Constants.VERSION_ID, copyObjectResult.getVersionId());
+        }
+    }
+    
+    private void listBuckets(AmazonS3 s3Client, Exchange exchange) {
+        List<Bucket> bucketsList = s3Client.listBuckets();
+        
+        Message message = getMessageForResponse(exchange);
+        message.setBody(bucketsList);
+    }
+    
+    private void deleteBucket(AmazonS3 s3Client, Exchange exchange) {
+        String bucketName;
+        
+        bucketName = exchange.getIn().getHeader(S3Constants.BUCKET_NAME, String.class);
+        if (ObjectHelper.isEmpty(bucketName)) {
+            bucketName = getConfiguration().getBucketName();
+        }
+
+        DeleteBucketRequest deleteBucketRequest = new DeleteBucketRequest(bucketName);
+        s3Client.deleteBucket(deleteBucketRequest);
+    }
+    
+    private S3Operations determineOperation(Exchange exchange) {
+        S3Operations operation = exchange.getIn().getHeader(EC2Constants.OPERATION, S3Operations.class);
+        if (operation == null) {
+            operation = getConfiguration().getOperation();
+        }
+        return operation;
     }
 
     private ObjectMetadata determineMetadata(final Exchange exchange) {
@@ -262,6 +363,18 @@ public class S3Producer extends DefaultProducer {
             objectMetadata.setUserMetadata(userMetadata);
         }
 
+        Map<String, String> s3Headers = CastUtils.cast(exchange.getIn().getHeader(S3Constants.S3_HEADERS, Map.class));
+        if (s3Headers != null) {
+            for (Map.Entry<String, String> entry : s3Headers.entrySet()) {
+                objectMetadata.setHeader(entry.getKey(), entry.getValue());
+            }
+        }
+
+        String encryption = exchange.getIn().getHeader(S3Constants.SERVER_SIDE_ENCRYPTION, getConfiguration().getServerSideEncryption(), String.class);
+        if (encryption != null) {
+            objectMetadata.setSSEAlgorithm(encryption);
+        }
+
         return objectMetadata;
     }
 
@@ -282,23 +395,16 @@ public class S3Producer extends DefaultProducer {
         return storageClass;
     }
 
-    private Message getMessageForResponse(final Exchange exchange) {
-        if (exchange.getPattern().isOutCapable()) {
-            Message out = exchange.getOut();
-            out.copyFrom(exchange.getIn());
-            return out;
-        }
-
-        return exchange.getIn();
-    }
-
     protected S3Configuration getConfiguration() {
         return getEndpoint().getConfiguration();
     }
 
     @Override
     public String toString() {
-        return "S3Producer[" + URISupport.sanitizeUri(getEndpoint().getEndpointUri()) + "]";
+        if (s3ProducerToString == null) {
+            s3ProducerToString = "S3Producer[" + URISupport.sanitizeUri(getEndpoint().getEndpointUri()) + "]";
+        }
+        return s3ProducerToString;
     }
 
     @Override

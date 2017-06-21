@@ -24,6 +24,7 @@ import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.processor.loadbalancer.LoadBalancer;
 import org.apache.camel.processor.loadbalancer.TopicLoadBalancer;
 import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriPath;
 import org.apache.camel.util.ObjectHelper;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
@@ -33,19 +34,20 @@ import org.springframework.context.ApplicationEvent;
 import static org.apache.camel.util.ObjectHelper.wrapRuntimeCamelException;
 
 /**
- * An <a href="http://camel.apache.org/event.html">Event Endpoint</a>
- * for working with Spring ApplicationEvents
- *
- * @version 
+ * The spring-event component allows to listen for Spring Application Events.
  */
-@UriEndpoint(scheme = "spring-event", consumerClass = EventConsumer.class)
+@UriEndpoint(firstVersion = "1.4.0", scheme = "spring-event", title = "Spring Event", syntax = "spring-event:name", consumerClass = EventConsumer.class, label = "spring,eventbus")
 public class EventEndpoint extends DefaultEndpoint implements ApplicationContextAware {
     private LoadBalancer loadBalancer;
     private ApplicationContext applicationContext;
 
-    public EventEndpoint(String endpointUri, EventComponent component) {
+    @UriPath(description = "Name of endpoint")
+    private String name;
+
+    public EventEndpoint(String endpointUri, EventComponent component, String name) {
         super(endpointUri, component);
         this.applicationContext = component.getApplicationContext();
+        this.name = name;
     }
 
     /**
@@ -64,6 +66,14 @@ public class EventEndpoint extends DefaultEndpoint implements ApplicationContext
 
     public ApplicationContext getApplicationContext() {
         return applicationContext;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public boolean isSingleton() {

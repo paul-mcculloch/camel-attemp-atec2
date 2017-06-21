@@ -19,32 +19,48 @@ package org.apache.camel.spi;
 import java.util.Map;
 
 /**
- * Configuration use by {@link org.apache.camel.spi.RestConsumerFactory} for Camel components to support
- * the Camel {@link org.apache.camel.model.rest.RestDefinition rest} DSL.
+ * Configuration use by {@link org.apache.camel.spi.RestConsumerFactory} and {@link org.apache.camel.spi.RestApiConsumerFactory}
+ * for Camel components to support the Camel {@link org.apache.camel.model.rest.RestDefinition rest} DSL.
  */
 public class RestConfiguration {
+
+    public static final String CORS_ACCESS_CONTROL_ALLOW_ORIGIN = "*";
+    public static final String CORS_ACCESS_CONTROL_ALLOW_METHODS = "GET, HEAD, POST, PUT, DELETE, TRACE, OPTIONS, CONNECT, PATCH";
+    public static final String CORS_ACCESS_CONTROL_MAX_AGE = "3600";
+    public static final String CORS_ACCESS_CONTROL_ALLOW_HEADERS = "Origin, Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers";
 
     public enum RestBindingMode {
         auto, off, json, xml, json_xml
     }
 
     public enum RestHostNameResolver {
-        localIp, localHostName
+        allLocalIp, localIp, localHostName
     }
 
     private String component;
+    private String apiComponent;
+    private String producerComponent;
+    private String producerApiDoc;
     private String scheme;
     private String host;
     private int port;
     private String contextPath;
-    private RestHostNameResolver restHostNameResolver = RestHostNameResolver.localHostName;
+    private String apiContextPath;
+    private String apiContextRouteId;
+    private String apiContextIdPattern;
+    private boolean apiContextListing;
+    private RestHostNameResolver restHostNameResolver = RestHostNameResolver.allLocalIp;
     private RestBindingMode bindingMode = RestBindingMode.off;
+    private boolean skipBindingOnErrorCode = true;
+    private boolean enableCORS;
     private String jsonDataFormat;
     private String xmlDataFormat;
     private Map<String, Object> componentProperties;
     private Map<String, Object> endpointProperties;
     private Map<String, Object> consumerProperties;
     private Map<String, Object> dataFormatProperties;
+    private Map<String, Object> apiProperties;
+    private Map<String, String> corsHeaders;
 
     /**
      * Gets the name of the Camel component to use as the REST consumer
@@ -62,6 +78,63 @@ public class RestConfiguration {
      */
     public void setComponent(String componentName) {
         this.component = componentName;
+    }
+
+    /**
+     * Gets the name of the Camel component to use as the REST API (such as swagger)
+     *
+     * @return the component name, or <tt>null</tt> to let Camel use the default name <tt>swagger</tt>
+     */
+    public String getApiComponent() {
+        return apiComponent;
+    }
+
+    /**
+     * Sets the name of the Camel component to use as the REST API (such as swagger)
+     *
+     * @param apiComponent the name of the component (such as swagger)
+     */
+    public void setApiComponent(String apiComponent) {
+        this.apiComponent = apiComponent;
+    }
+
+    /**
+     * Gets the name of the Camel component to use as the REST producer
+     *
+     * @return the component name, or <tt>null</tt> to let Camel search the {@link Registry} to find suitable implementation
+     */
+    public String getProducerComponent() {
+        return producerComponent;
+    }
+
+    /**
+     * Sets the name of the Camel component to use as the REST producer
+     *
+     * @param componentName the name of the component (such as restlet, jetty, etc.)
+     */
+    public void setProducerComponent(String componentName) {
+        this.producerComponent = componentName;
+    }
+
+    /**
+     * Gets the location of the api document (swagger api) the REST producer will use
+     * to validate the REST uri and query parameters are valid accordingly to the api document.
+     */
+    public String getProducerApiDoc() {
+        return producerApiDoc;
+    }
+
+    /**
+     * Sets the location of the api document (swagger api) the REST producer will use
+     * to validate the REST uri and query parameters are valid accordingly to the api document.
+     * This requires adding camel-swagger-java to the classpath, and any miss configuration
+     * will let Camel fail on startup and report the error(s).
+     * <p/>
+     * The location of the api document is loaded from classpath by default, but you can use
+     * <tt>file:</tt> or <tt>http:</tt> to refer to resources to load from file or http url.
+     */
+    public void setProducerApiDoc(String producerApiDoc) {
+        this.producerApiDoc = producerApiDoc;
     }
 
     /**
@@ -131,12 +204,72 @@ public class RestConfiguration {
      * Sets a leading context-path the REST services will be using.
      * <p/>
      * This can be used when using components such as <tt>camel-servlet</tt> where the deployed web application
-     * is deployed using a context-path.
+     * is deployed using a context-path. Or for components such as <tt>camel-jetty</tt> or <tt>camel-netty4-http</tt>
+     * that includes a HTTP server.
      *
      * @param contextPath the context path
      */
     public void setContextPath(String contextPath) {
         this.contextPath = contextPath;
+    }
+
+    public String getApiContextPath() {
+        return apiContextPath;
+    }
+
+    /**
+     * Sets a leading API context-path the REST API services will be using.
+     * <p/>
+     * This can be used when using components such as <tt>camel-servlet</tt> where the deployed web application
+     * is deployed using a context-path.
+     *
+     * @param contextPath the API context path
+     */
+    public void setApiContextPath(String contextPath) {
+        this.apiContextPath = contextPath;
+    }
+
+    public String getApiContextRouteId() {
+        return apiContextRouteId;
+    }
+
+    /**
+     * Sets the route id to use for the route that services the REST API.
+     * <p/>
+     * The route will by default use an auto assigned route id.
+     *
+     * @param apiContextRouteId  the route id
+     */
+    public void setApiContextRouteId(String apiContextRouteId) {
+        this.apiContextRouteId = apiContextRouteId;
+    }
+
+    public String getApiContextIdPattern() {
+        return apiContextIdPattern;
+    }
+
+    /**
+     * Optional CamelContext id pattern to only allow Rest APIs from rest services within CamelContext's which name matches the pattern.
+     * <p/>
+     * The pattern <tt>#name#</tt> refers to the CamelContext name, to match on the current CamelContext only.
+     * For any other value, the pattern uses the rules from {@link org.apache.camel.util.EndpointHelper#matchPattern(String, String)}
+     *
+     * @param apiContextIdPattern  the pattern
+     */
+    public void setApiContextIdPattern(String apiContextIdPattern) {
+        this.apiContextIdPattern = apiContextIdPattern;
+    }
+
+    public boolean isApiContextListing() {
+        return apiContextListing;
+    }
+
+    /**
+     * Sets whether listing of all available CamelContext's with REST services in the JVM is enabled. If enabled it allows to discover
+     * these contexts, if <tt>false</tt> then only the current CamelContext is in use.
+     */
+    public void setApiContextListing(boolean apiContextListing) {
+        this.apiContextListing = apiContextListing;
     }
 
     /**
@@ -194,7 +327,53 @@ public class RestConfiguration {
     }
 
     /**
+     * Whether to skip binding output if there is a custom HTTP error code, and instead use the response body as-is.
+     * <p/>
+     * This option is default <tt>true</tt>.
+     *
+     * @return whether to skip binding on error code
+     */
+    public boolean isSkipBindingOnErrorCode() {
+        return skipBindingOnErrorCode;
+    }
+
+    /**
+     * Whether to skip binding output if there is a custom HTTP error code, and instead use the response body as-is.
+     * <p/>
+     * This option is default <tt>true</tt>.
+     *
+     * @param skipBindingOnErrorCode whether to skip binding on error code
+     */
+    public void setSkipBindingOnErrorCode(boolean skipBindingOnErrorCode) {
+        this.skipBindingOnErrorCode = skipBindingOnErrorCode;
+    }
+
+    /**
+     * To specify whether to enable CORS which means Camel will automatic include CORS in the HTTP headers in the response.
+     * <p/>
+     * This option is default <tt>false</tt>
+     *
+     * @return whether CORS is enabled or not
+     */
+    public boolean isEnableCORS() {
+        return enableCORS;
+    }
+
+    /**
+     * To specify whether to enable CORS which means Camel will automatic include CORS in the HTTP headers in the response.
+     * <p/>
+     * This option is default <tt>false</tt>
+     *
+     * @param enableCORS <tt>true</tt> to enable CORS
+     */
+    public void setEnableCORS(boolean enableCORS) {
+        this.enableCORS = enableCORS;
+    }
+
+    /**
      * Gets the name of the json data format.
+     * <p/>
+     * <b>Important:</b> This option is only for setting a custom name of the data format, not to refer to an existing data format instance.
      *
      * @return the name, or <tt>null</tt> to use default
      */
@@ -204,6 +383,8 @@ public class RestConfiguration {
 
     /**
      * Sets a custom json data format to be used
+     * <p/>
+     * <b>Important:</b> This option is only for setting a custom name of the data format, not to refer to an existing data format instance.
      *
      * @param name name of the data format
      */
@@ -213,6 +394,8 @@ public class RestConfiguration {
 
     /**
      * Gets the name of the xml data format.
+     * <p/>
+     * <b>Important:</b> This option is only for setting a custom name of the data format, not to refer to an existing data format instance.
      *
      * @return the name, or <tt>null</tt> to use default
      */
@@ -221,7 +404,9 @@ public class RestConfiguration {
     }
 
     /**
-     * Sets a custom xml data format to be used
+     * Sets a custom xml data format to be used.
+     * <p/>
+     * <b>Important:</b> This option is only for setting a custom name of the data format, not to refer to an existing data format instance.
      *
      * @param name name of the data format
      */
@@ -299,5 +484,36 @@ public class RestConfiguration {
      */
     public void setDataFormatProperties(Map<String, Object> dataFormatProperties) {
         this.dataFormatProperties = dataFormatProperties;
+    }
+
+    public Map<String, Object> getApiProperties() {
+        return apiProperties;
+    }
+
+    /**
+     * Sets additional options on api level
+     *
+     * @param apiProperties the options
+     */
+    public void setApiProperties(Map<String, Object> apiProperties) {
+        this.apiProperties = apiProperties;
+    }
+
+    /**
+     * Gets the CORS headers to use if CORS has been enabled.
+     *
+     * @return the CORS headers
+     */
+    public Map<String, String> getCorsHeaders() {
+        return corsHeaders;
+    }
+
+    /**
+     * Sets the CORS headers to use if CORS has been enabled.
+     *
+     * @param corsHeaders the CORS headers
+     */
+    public void setCorsHeaders(Map<String, String> corsHeaders) {
+        this.corsHeaders = corsHeaders;
     }
 }

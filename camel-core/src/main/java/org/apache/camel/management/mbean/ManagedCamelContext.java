@@ -16,25 +16,28 @@
  */
 package org.apache.camel.management.mbean;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.management.MBeanServer;
-import javax.management.MBeanServerInvocationHandler;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
 import javax.management.openmbean.CompositeDataSupport;
 import javax.management.openmbean.CompositeType;
 import javax.management.openmbean.TabularData;
 import javax.management.openmbean.TabularDataSupport;
+
+import org.w3c.dom.Document;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Component;
@@ -56,20 +59,35 @@ import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.RoutesDefinition;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.camel.model.rest.RestsDefinition;
+import org.apache.camel.spi.ManagementStrategy;
+import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.JsonSchemaHelper;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.XmlLineNumberParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * @version 
+ * @version
  */
 @ManagedResource(description = "Managed CamelContext")
 public class ManagedCamelContext extends ManagedPerformanceCounter implements TimerListener, ManagedCamelContextMBean {
-    private final ModelCamelContext context;   
+
+    private static final Logger LOG = LoggerFactory.getLogger(ManagedCamelContext.class);
+
+    private final ModelCamelContext context;
     private final LoadTriplet load = new LoadTriplet();
+    private final String jmxDomain;
 
     public ManagedCamelContext(ModelCamelContext context) {
         this.context = context;
-        boolean enabled = context.getManagementStrategy().getStatisticsLevel() != ManagementStatisticsLevel.Off;
+        this.jmxDomain = context.getManagementStrategy().getManagementAgent().getMBeanObjectDomainName();
+    }
+
+    @Override
+    public void init(ManagementStrategy strategy) {
+        super.init(strategy);
+        boolean enabled = context.getManagementStrategy().getManagementAgent() != null && context.getManagementStrategy().getManagementAgent().getStatisticsLevel() != ManagementStatisticsLevel.Off;
         setStatisticsEnabled(enabled);
     }
 
@@ -97,6 +115,18 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         return context.getUptime();
     }
 
+    public long getUptimeMillis() {
+        return context.getUptimeMillis();
+    }
+
+    public String getManagementStatisticsLevel() {
+        if (context.getManagementStrategy().getManagementAgent() != null) {
+            return context.getManagementStrategy().getManagementAgent().getStatisticsLevel().name();
+        } else {
+            return null;
+        }
+    }
+
     public String getClassResolver() {
         return context.getClassResolver().getClass().getName();
     }
@@ -113,19 +143,37 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         }
     }
 
+    @Deprecated
     public Map<String, String> getProperties() {
-        if (context.getProperties().isEmpty()) {
-            return null;
-        }
-        return context.getProperties();
-    }
-    
-    public String getProperty(String name) throws Exception {
-        return context.getProperty(name);
+        return getGlobalOptions();
     }
 
-    public void setProperty(String name, String value) throws Exception {
-        context.getProperties().put(name, value);
+    @Override
+    public Map<String, String> getGlobalOptions() {
+        if (context.getGlobalOptions().isEmpty()) {
+            return null;
+        }
+        return context.getGlobalOptions();
+    }
+
+    @Deprecated
+    public String getProperty(String key) throws Exception {
+        return getGlobalOption(key);
+    }
+
+    @Override
+    public String getGlobalOption(String key) throws Exception {
+        return context.getGlobalOption(key);
+    }
+
+    @Deprecated
+    public void setProperty(String key, String value) throws Exception {
+        setGlobalOption(key, value);
+    }
+
+    @Override
+    public void setGlobalOption(String key, String value) throws Exception {
+        context.getGlobalOptions().put(key, value);
     }
 
     public Boolean getTracing() {
@@ -137,7 +185,7 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
     }
 
     public Integer getInflightExchanges() {
-        return context.getInflightRepository().size();
+        return (int) super.getExchangesInflight();
     }
 
     public Integer getTotalRoutes() {
@@ -220,8 +268,16 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         return context.isMessageHistory() != null ? context.isMessageHistory() : false;
     }
 
+    public boolean isLogMask() {
+        return context.isLogMask() != null ? context.isLogMask() : false;
+    }
+
     public boolean isUseMDCLogging() {
         return context.isUseMDCLogging();
+    }
+
+    public boolean isUseDataType() {
+        return context.isUseDataType();
     }
 
     public void onTimer() {
@@ -324,6 +380,11 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
     }
 
     public String dumpRestsAsXml() throws Exception {
+        return dumpRestsAsXml(false);
+    }
+
+    @Override
+    public String dumpRestsAsXml(boolean resolvePlaceholders) throws Exception {
         List<RestDefinition> rests = context.getRestDefinitions();
         if (rests.isEmpty()) {
             return null;
@@ -332,10 +393,44 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         // use a routes definition to dump the rests
         RestsDefinition def = new RestsDefinition();
         def.setRests(rests);
-        return ModelHelper.dumpModelAsXml(def);
+        String xml = ModelHelper.dumpModelAsXml(context, def);
+
+        // if resolving placeholders we parse the xml, and resolve the property placeholders during parsing
+        if (resolvePlaceholders) {
+            final AtomicBoolean changed = new AtomicBoolean();
+            InputStream is = new ByteArrayInputStream(xml.getBytes());
+            Document dom = XmlLineNumberParser.parseXml(is, new XmlLineNumberParser.XmlTextTransformer() {
+                @Override
+                public String transform(String text) {
+                    try {
+                        String after = getContext().resolvePropertyPlaceholders(text);
+                        if (!changed.get()) {
+                            changed.set(!text.equals(after));
+                        }
+                        return after;
+                    } catch (Exception e) {
+                        // ignore
+                        return text;
+                    }
+                }
+            });
+            // okay there were some property placeholder replaced so re-create the model
+            if (changed.get()) {
+                xml = context.getTypeConverter().mandatoryConvertTo(String.class, dom);
+                RestsDefinition copy = ModelHelper.createModelFromXml(context, xml, RestsDefinition.class);
+                xml = ModelHelper.dumpModelAsXml(context, copy);
+            }
+        }
+
+        return xml;
     }
 
     public String dumpRoutesAsXml() throws Exception {
+        return dumpRoutesAsXml(false);
+    }
+
+    @Override
+    public String dumpRoutesAsXml(boolean resolvePlaceholders) throws Exception {
         List<RouteDefinition> routes = context.getRouteDefinitions();
         if (routes.isEmpty()) {
             return null;
@@ -344,7 +439,36 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         // use a routes definition to dump the routes
         RoutesDefinition def = new RoutesDefinition();
         def.setRoutes(routes);
-        return ModelHelper.dumpModelAsXml(def);
+        String xml = ModelHelper.dumpModelAsXml(context, def);
+
+        // if resolving placeholders we parse the xml, and resolve the property placeholders during parsing
+        if (resolvePlaceholders) {
+            final AtomicBoolean changed = new AtomicBoolean();
+            InputStream is = new ByteArrayInputStream(xml.getBytes());
+            Document dom = XmlLineNumberParser.parseXml(is, new XmlLineNumberParser.XmlTextTransformer() {
+                @Override
+                public String transform(String text) {
+                    try {
+                        String after = getContext().resolvePropertyPlaceholders(text);
+                        if (!changed.get()) {
+                            changed.set(!text.equals(after));
+                        }
+                        return after;
+                    } catch (Exception e) {
+                        // ignore
+                        return text;
+                    }
+                }
+            });
+            // okay there were some property placeholder replaced so re-create the model
+            if (changed.get()) {
+                xml = context.getTypeConverter().mandatoryConvertTo(String.class, dom);
+                RoutesDefinition copy = ModelHelper.createModelFromXml(context, xml, RoutesDefinition.class);
+                xml = ModelHelper.dumpModelAsXml(context, copy);
+            }
+        }
+
+        return xml;
     }
 
     public void addOrUpdateRoutesFromXml(String xml) throws Exception {
@@ -364,42 +488,52 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
             return;
         }
 
-        // add will remove existing route first
-        context.addRouteDefinitions(def.getRoutes());
+        try {
+            // add will remove existing route first
+            context.addRouteDefinitions(def.getRoutes());
+        } catch (Exception e) {
+            // log the error as warn as the management api may be invoked remotely over JMX which does not propagate such exception
+            String msg = "Error updating routes from xml: " + xml + " due: " + e.getMessage();
+            LOG.warn(msg, e);
+            throw e;
+        }
     }
 
     public String dumpRoutesStatsAsXml(boolean fullStats, boolean includeProcessors) throws Exception {
         StringBuilder sb = new StringBuilder();
-        sb.append("<camelContextStat").append(String.format(" id=\"%s\"", getCamelId()));
+        sb.append("<camelContextStat").append(String.format(" id=\"%s\" state=\"%s\"", getCamelId(), getState()));
         // use substring as we only want the attributes
         String stat = dumpStatsAsXml(fullStats);
+        sb.append(" exchangesInflight=\"").append(getInflightExchanges()).append("\"");
         sb.append(" ").append(stat.substring(7, stat.length() - 2)).append(">\n");
 
         MBeanServer server = getContext().getManagementStrategy().getManagementAgent().getMBeanServer();
         if (server != null) {
             // gather all the routes for this CamelContext, which requires JMX
             String prefix = getContext().getManagementStrategy().getManagementAgent().getIncludeHostName() ? "*/" : "";
-            ObjectName query = ObjectName.getInstance("org.apache.camel:context=" + prefix + getContext().getManagementName() + ",type=routes,*");
+            ObjectName query = ObjectName.getInstance(jmxDomain + ":context=" + prefix + getContext().getManagementName() + ",type=routes,*");
             Set<ObjectName> routes = server.queryNames(query, null);
 
-            Set<ManagedProcessorMBean> processors = new LinkedHashSet<ManagedProcessorMBean>();
+            List<ManagedProcessorMBean> processors = new ArrayList<ManagedProcessorMBean>();
             if (includeProcessors) {
                 // gather all the processors for this CamelContext, which requires JMX
-                query = ObjectName.getInstance("org.apache.camel:context=" + prefix + getContext().getManagementName() + ",type=processors,*");
+                query = ObjectName.getInstance(jmxDomain + ":context=" + prefix + getContext().getManagementName() + ",type=processors,*");
                 Set<ObjectName> names = server.queryNames(query, null);
                 for (ObjectName on : names) {
-                    ManagedProcessorMBean processor = MBeanServerInvocationHandler.newProxyInstance(server, on, ManagedProcessorMBean.class, true);
+                    ManagedProcessorMBean processor = context.getManagementStrategy().getManagementAgent().newProxyClient(on, ManagedProcessorMBean.class);
                     processors.add(processor);
                 }
             }
-            
+            processors.sort(new OrderProcessorMBeans());
+
             // loop the routes, and append the processor stats if needed
             sb.append("  <routeStats>\n");
             for (ObjectName on : routes) {
-                ManagedRouteMBean route = MBeanServerInvocationHandler.newProxyInstance(server, on, ManagedRouteMBean.class, true);
-                sb.append("    <routeStat").append(String.format(" id=\"%s\"", route.getRouteId()));
+                ManagedRouteMBean route = context.getManagementStrategy().getManagementAgent().newProxyClient(on, ManagedRouteMBean.class);
+                sb.append("    <routeStat").append(String.format(" id=\"%s\" state=\"%s\"", route.getRouteId(), route.getState()));
                 // use substring as we only want the attributes
                 stat = route.dumpStatsAsXml(fullStats);
+                sb.append(" exchangesInflight=\"").append(route.getExchangesInflight()).append("\"");
                 sb.append(" ").append(stat.substring(7, stat.length() - 2)).append(">\n");
 
                 // add processor details if needed
@@ -408,9 +542,11 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
                     for (ManagedProcessorMBean processor : processors) {
                         // the processor must belong to this route
                         if (route.getRouteId().equals(processor.getRouteId())) {
-                            sb.append("        <processorStat").append(String.format(" id=\"%s\"", processor.getProcessorId()));
+                            sb.append("        <processorStat").append(String.format(" id=\"%s\" index=\"%s\" state=\"%s\"", processor.getProcessorId(), processor.getIndex(), processor.getState()));
                             // use substring as we only want the attributes
-                            sb.append(" ").append(processor.dumpStatsAsXml(fullStats).substring(7)).append("\n");
+                            stat = processor.dumpStatsAsXml(fullStats);
+                            sb.append(" exchangesInflight=\"").append(processor.getExchangesInflight()).append("\"");
+                            sb.append(" ").append(stat.substring(7)).append("\n");
                         }
                     }
                     sb.append("      </processorStats>\n");
@@ -421,6 +557,25 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         }
 
         sb.append("</camelContextStat>");
+        return sb.toString();
+    }
+
+    public String dumpRoutesCoverageAsXml() throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<camelContextRouteCoverage")
+                .append(String.format(" id=\"%s\" exchangesTotal=\"%s\" totalProcessingTime=\"%s\"", getCamelId(), getExchangesTotal(), getTotalProcessingTime()))
+                .append(">\n");
+
+        String xml = dumpRoutesAsXml();
+        if (xml != null) {
+            // use the coverage xml parser to dump the routes and enrich with coverage stats
+            Document dom = RouteCoverageXmlParser.parseXml(context, new ByteArrayInputStream(xml.getBytes()));
+            // convert dom back to xml
+            String converted = context.getTypeConverter().convertTo(String.class, dom);
+            sb.append(converted);
+        }
+
+        sb.append("\n</camelContextRouteCoverage>");
         return sb.toString();
     }
 
@@ -452,6 +607,41 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         return removed.size();
     }
 
+    public Map<String, Properties> findEips() throws Exception {
+        return context.findEips();
+    }
+
+    public List<String> findEipNames() throws Exception {
+        Map<String, Properties> map = findEips();
+        return new ArrayList<String>(map.keySet());
+    }
+
+    public TabularData listEips() throws Exception {
+        try {
+            // find all EIPs
+            Map<String, Properties> eips = context.findEips();
+
+            TabularData answer = new TabularDataSupport(CamelOpenMBeanTypes.listEipsTabularType());
+
+            // gather EIP detail for each eip
+            for (Map.Entry<String, Properties> entry : eips.entrySet()) {
+                String name = entry.getKey();
+                String title = (String) entry.getValue().get("title");
+                String description = (String) entry.getValue().get("description");
+                String label = (String) entry.getValue().get("label");
+                String type = (String) entry.getValue().get("class");
+                String status = CamelContextHelper.isEipInUse(context, name) ? "in use" : "on classpath";
+                CompositeType ct = CamelOpenMBeanTypes.listEipsCompositeType();
+                CompositeData data = new CompositeDataSupport(ct, new String[]{"name", "title", "description", "label", "status", "type"},
+                        new Object[]{name, title, description, label, status, type});
+                answer.put(data);
+            }
+            return answer;
+        } catch (Exception e) {
+            throw ObjectHelper.wrapRuntimeCamelException(e);
+        }
+    }
+
     public Map<String, Properties> findComponents() throws Exception {
         Map<String, Properties> answer = context.findComponents();
         for (Map.Entry<String, Properties> entry : answer.entrySet()) {
@@ -466,7 +656,7 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
     }
 
     public String getComponentDocumentation(String componentName) throws IOException {
-        return context.getComponentDocumentation(componentName);
+        return null;
     }
 
     public String createRouteStaticEndpointJson() {
@@ -493,8 +683,12 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
             // gather component detail for each component
             for (Map.Entry<String, Properties> entry : components.entrySet()) {
                 String name = entry.getKey();
+                String title = null;
+                String syntax = null;
                 String description = null;
                 String label = null;
+                String deprecated = null;
+                String secret = null;
                 String status = context.hasComponent(name) != null ? "in use" : "on classpath";
                 String type = (String) entry.getValue().get("class");
                 String groupId = null;
@@ -510,10 +704,18 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
                 String json = context.getComponentParameterJsonSchema(target);
                 List<Map<String, String>> rows = JsonSchemaHelper.parseJsonSchema("component", json, false);
                 for (Map<String, String> row : rows) {
-                    if (row.containsKey("description")) {
+                    if (row.containsKey("title")) {
+                        title = row.get("title");
+                    } else if (row.containsKey("syntax")) {
+                        syntax = row.get("syntax");
+                    } else if (row.containsKey("description")) {
                         description = row.get("description");
                     } else if (row.containsKey("label")) {
                         label = row.get("label");
+                    } else if (row.containsKey("deprecated")) {
+                        deprecated = row.get("deprecated");
+                    } else if (row.containsKey("secret")) {
+                        secret = row.get("secret");
                     } else if (row.containsKey("javaType")) {
                         type = row.get("javaType");
                     } else if (row.containsKey("groupId")) {
@@ -526,8 +728,9 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
                 }
 
                 CompositeType ct = CamelOpenMBeanTypes.listComponentsCompositeType();
-                CompositeData data = new CompositeDataSupport(ct, new String[]{"name", "description", "label", "status", "type", "groupId", "artifactId", "version"},
-                        new Object[]{name, description, label, status, type, groupId, artifactId, version});
+                CompositeData data = new CompositeDataSupport(ct,
+                        new String[]{"name", "title", "syntax", "description", "label", "deprecated", "secret", "status", "type", "groupId", "artifactId", "version"},
+                        new Object[]{name, title, syntax, description, label, deprecated, secret, status, type, groupId, artifactId, version});
                 answer.put(data);
             }
             return answer;
@@ -565,6 +768,26 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
         return json;
     }
 
+    public String dataFormatParameterJsonSchema(String dataFormatName) throws Exception {
+        return context.getDataFormatParameterJsonSchema(dataFormatName);
+    }
+
+    public String languageParameterJsonSchema(String languageName) throws Exception {
+        return context.getLanguageParameterJsonSchema(languageName);
+    }
+
+    public String eipParameterJsonSchema(String eipName) throws Exception {
+        return context.getEipParameterJsonSchema(eipName);
+    }
+
+    public String explainEipJson(String nameOrId, boolean includeAllOptions) {
+        return context.explainEipJson(nameOrId, includeAllOptions);
+    }
+
+    public String explainComponentJson(String componentName, boolean includeAllOptions) throws Exception {
+        return context.explainComponentJson(componentName, includeAllOptions);
+    }
+
     public String explainEndpointJson(String uri, boolean includeAllOptions) throws Exception {
         return context.explainEndpointJson(uri, includeAllOptions);
     }
@@ -577,12 +800,23 @@ public class ManagedCamelContext extends ManagedPerformanceCounter implements Ti
             MBeanServer server = getContext().getManagementStrategy().getManagementAgent().getMBeanServer();
             if (server != null) {
                 String prefix = getContext().getManagementStrategy().getManagementAgent().getIncludeHostName() ? "*/" : "";
-                ObjectName query = ObjectName.getInstance("org.apache.camel:context=" + prefix + getContext().getManagementName() + ",type=routes,*");
+                ObjectName query = ObjectName.getInstance(jmxDomain + ":context=" + prefix + getContext().getManagementName() + ",type=routes,*");
                 Set<ObjectName> names = server.queryNames(query, null);
                 for (ObjectName name : names) {
                     server.invoke(name, "reset", new Object[]{true}, new String[]{"boolean"});
                 }
             }
+        }
+    }
+
+    /**
+     * Used for sorting the processor mbeans accordingly to their index.
+     */
+    private static final class OrderProcessorMBeans implements Comparator<ManagedProcessorMBean> {
+
+        @Override
+        public int compare(ManagedProcessorMBean o1, ManagedProcessorMBean o2) {
+            return o1.getIndex().compareTo(o2.getIndex());
         }
     }
 

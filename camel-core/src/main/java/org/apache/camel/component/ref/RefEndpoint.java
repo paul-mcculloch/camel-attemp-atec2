@@ -23,16 +23,20 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriPath;
 import org.apache.camel.util.CamelContextHelper;
 
-@UriEndpoint(scheme = "ref", label = "core,endpoint")
+/**
+ * The ref component is used for lookup of existing endpoints bound in the Registry.
+ */
+@UriEndpoint(firstVersion = "1.2.0", scheme = "ref", title = "Ref", syntax = "ref:name", label = "core,endpoint")
 public class RefEndpoint extends DefaultEndpoint implements DelegateEndpoint {
 
     private volatile Endpoint endpoint;
 
-    @UriPath
+    @UriPath @Metadata(required = "true")
     private String name;
 
     public RefEndpoint(String endpointUri, Component component) {
@@ -73,8 +77,8 @@ public class RefEndpoint extends DefaultEndpoint implements DelegateEndpoint {
     @Override
     protected void doStart() throws Exception {
         endpoint = CamelContextHelper.mandatoryLookup(getCamelContext(), name, Endpoint.class);
-        // add the endpoint as a service so Camel can manage the endpoint and enlist the endpoint in JMX etc.
-        getCamelContext().addService(endpoint);
+        // add the endpoint to the endpoint registry
+        getCamelContext().addEndpoint(endpoint.getEndpointUri(), endpoint);
         super.doStart();
     }
 

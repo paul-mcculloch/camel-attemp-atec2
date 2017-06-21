@@ -22,9 +22,12 @@ import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlValue;
 
+import org.apache.camel.spi.Metadata;
+
 /**
- * Represents a header for the uniVocity data formats.
+ * To configure headers for UniVocity data formats.
  */
+@Metadata(label = "dataformat,transformation,csv", title = "uniVocity Header")
 @XmlRootElement(name = "univocity-header")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UniVocityHeader {
@@ -37,6 +40,9 @@ public class UniVocityHeader {
         return name;
     }
 
+    /**
+     * Header name
+     */
     public void setName(String name) {
         this.name = name;
     }
@@ -45,6 +51,9 @@ public class UniVocityHeader {
         return length;
     }
 
+    /**
+     * Header length
+     */
     public void setLength(Integer length) {
         this.length = length;
     }

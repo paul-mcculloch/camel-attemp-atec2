@@ -23,21 +23,22 @@ import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.spi.DataFormat;
-
+import org.apache.camel.spi.Metadata;
 
 /**
- * Represents the uniVocity CSV {@link org.apache.camel.spi.DataFormat}
+ * UniVocity CSV data format
  */
+@Metadata(firstVersion = "2.15.0", label = "dataformat,transformation,csv", title = "uniVocity CSV")
 @XmlRootElement(name = "univocity-csv")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UniVocityCsvDataFormat extends UniVocityAbstractDataFormat {
     @XmlAttribute
     protected Boolean quoteAllFields;
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = "\"")
     protected String quote;
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = "\"")
     protected String quoteEscape;
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = ",")
     protected String delimiter;
 
     public UniVocityCsvDataFormat() {
@@ -48,6 +49,9 @@ public class UniVocityCsvDataFormat extends UniVocityAbstractDataFormat {
         return quoteAllFields;
     }
 
+    /**
+     * Whether or not all values must be quoted when writing them.
+     */
     public void setQuoteAllFields(Boolean quoteAllFields) {
         this.quoteAllFields = quoteAllFields;
     }
@@ -56,6 +60,9 @@ public class UniVocityCsvDataFormat extends UniVocityAbstractDataFormat {
         return quote;
     }
 
+    /**
+     * The quote symbol.
+     */
     public void setQuote(String quote) {
         this.quote = quote;
     }
@@ -64,6 +71,9 @@ public class UniVocityCsvDataFormat extends UniVocityAbstractDataFormat {
         return quoteEscape;
     }
 
+    /**
+     * The quote escape symbol
+     */
     public void setQuoteEscape(String quoteEscape) {
         this.quoteEscape = quoteEscape;
     }
@@ -72,6 +82,9 @@ public class UniVocityCsvDataFormat extends UniVocityAbstractDataFormat {
         return delimiter;
     }
 
+    /**
+     * The delimiter of values
+     */
     public void setDelimiter(String delimiter) {
         this.delimiter = delimiter;
     }

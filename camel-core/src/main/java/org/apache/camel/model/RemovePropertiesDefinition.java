@@ -23,13 +23,15 @@ import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.camel.Processor;
-import org.apache.camel.builder.ProcessorBuilder;
+import org.apache.camel.processor.RemovePropertiesProcessor;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
 
 /**
- * Represents an XML &lt;removeProperties/&gt; element
+ * Removes message exchange properties whose name matches a specified pattern
  */
+@Metadata(label = "eip,transformation")
 @XmlRootElement(name = "removeProperties")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RemovePropertiesDefinition extends NoOutputDefinition<RemovePropertiesDefinition> {
@@ -59,11 +61,6 @@ public class RemovePropertiesDefinition extends NoOutputDefinition<RemovePropert
     }
 
     @Override
-    public String getShortName() {
-        return "removeProperties";
-    }
-
-    @Override
     public String getLabel() {
         return "removeProperties[" + getPattern() + "]";
     }
@@ -72,14 +69,17 @@ public class RemovePropertiesDefinition extends NoOutputDefinition<RemovePropert
     public Processor createProcessor(RouteContext routeContext) throws Exception {
         ObjectHelper.notNull(getPattern(), "patterns", this);
         if (getExcludePatterns() != null) {
-            return ProcessorBuilder.removeProperties(getPattern(), getExcludePatterns());
+            return new RemovePropertiesProcessor(getPattern(), getExcludePatterns());
         } else if (getExcludePattern() != null) {
-            return ProcessorBuilder.removeProperties(getPattern(), getExcludePattern());
+            return new RemovePropertiesProcessor(getPattern(), new String[]{getExcludePattern()});
         } else {
-            return ProcessorBuilder.removeProperties(getPattern());
+            return new RemovePropertiesProcessor(getPattern(), null);
         }
     }
 
+    /**
+     * Name or pattern of properties to remove
+     */
     public void setPattern(String pattern) {
         this.pattern = pattern;
     }
@@ -92,6 +92,9 @@ public class RemovePropertiesDefinition extends NoOutputDefinition<RemovePropert
         return excludePatterns;
     }
 
+    /**
+     * Name or pattern of properties to not remove
+     */
     public void setExcludePatterns(String[] excludePatterns) {
         this.excludePatterns = excludePatterns;
     }
@@ -100,6 +103,9 @@ public class RemovePropertiesDefinition extends NoOutputDefinition<RemovePropert
         return excludePattern;
     }
 
+    /**
+     * Name or pattern of properties to not remove
+     */
     public void setExcludePattern(String excludePattern) {
         this.excludePattern = excludePattern;
     }

@@ -25,6 +25,7 @@ import javax.xml.bind.annotation.XmlTransient;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Expression;
 import org.apache.camel.Predicate;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.ObjectHelper;
 
 /**
@@ -32,15 +33,21 @@ import org.apache.camel.util.ObjectHelper;
  *
  * @version 
  */
+@Metadata(firstVersion = "2.13.0", label = "language,json", title = "JSonPath")
 @XmlRootElement(name = "jsonpath")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class JsonPathExpression extends ExpressionDefinition {
 
     @XmlAttribute(name = "resultType")
     private String resultTypeName;
-
     @XmlTransient
     private Class<?> resultType;
+    @XmlAttribute @Metadata(defaultValue = "false")
+    private Boolean suppressExceptions;
+    @XmlAttribute @Metadata(defaultValue = "true")
+    private Boolean allowSimple;
+    @XmlAttribute @Metadata(defaultValue = "true")
+    private Boolean allowEasyPredicate;
 
     public JsonPathExpression() {
     }
@@ -53,6 +60,9 @@ public class JsonPathExpression extends ExpressionDefinition {
         return resultTypeName;
     }
 
+    /**
+     * Sets the class name of the result type (type from output)
+     */
     public void setResultTypeName(String resultTypeName) {
         this.resultTypeName = resultTypeName;
     }
@@ -61,8 +71,44 @@ public class JsonPathExpression extends ExpressionDefinition {
         return resultType;
     }
 
+    /**
+     * Sets the class of the result type (type from output)
+     */
     public void setResultType(Class<?> resultType) {
         this.resultType = resultType;
+    }
+
+    public Boolean getSuppressExceptions() {
+        return suppressExceptions;
+    }
+
+    public Boolean getAllowSimple() {
+        return allowSimple;
+    }
+
+    /**
+     * Whether to allow in inlined simple exceptions in the json path expression
+     */
+    public void setAllowSimple(Boolean allowSimple) {
+        this.allowSimple = allowSimple;
+    }
+
+    public Boolean getAllowEasyPredicate() {
+        return allowEasyPredicate;
+    }
+
+    /**
+     * Whether to allow using the easy predicate parser to pre-parse predicates.
+     */
+    public void setAllowEasyPredicate(Boolean allowEasyPredicate) {
+        this.allowEasyPredicate = allowEasyPredicate;
+    }
+
+    /**
+     * Whether to suppress exceptions such as PathNotFoundException.
+     */
+    public void setSuppressExceptions(Boolean suppressExceptions) {
+        this.suppressExceptions = suppressExceptions;
     }
 
     public String getLanguage() {
@@ -86,6 +132,15 @@ public class JsonPathExpression extends ExpressionDefinition {
         if (resultType != null) {
             setProperty(expression, "resultType", resultType);
         }
+        if (suppressExceptions != null) {
+            setProperty(expression, "suppressExceptions", suppressExceptions);
+        }
+        if (allowSimple != null) {
+            setProperty(expression, "allowSimple", allowSimple);
+        }
+        if (allowEasyPredicate != null) {
+            setProperty(expression, "allowEasyPredicate", allowEasyPredicate);
+        }
         super.configureExpression(camelContext, expression);
     }
 
@@ -93,6 +148,15 @@ public class JsonPathExpression extends ExpressionDefinition {
     protected void configurePredicate(CamelContext camelContext, Predicate predicate) {
         if (resultType != null) {
             setProperty(predicate, "resultType", resultType);
+        }
+        if (suppressExceptions != null) {
+            setProperty(predicate, "suppressExceptions", suppressExceptions);
+        }
+        if (allowSimple != null) {
+            setProperty(predicate, "allowSimple", allowSimple);
+        }
+        if (allowEasyPredicate != null) {
+            setProperty(predicate, "allowEasyPredicate", allowEasyPredicate);
         }
         super.configurePredicate(camelContext, predicate);
     }

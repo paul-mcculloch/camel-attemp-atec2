@@ -17,37 +17,34 @@
 package org.apache.camel.commands;
 
 import java.io.PrintStream;
+import java.io.StringReader;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Unmarshaller;
 
-import org.apache.camel.CamelContext;
-import org.apache.camel.Endpoint;
-import org.apache.camel.Route;
-import org.apache.camel.spi.ManagementAgent;
+import org.apache.camel.util.CamelContextStatDump;
 
-import static org.apache.camel.util.UnitUtils.printUnitFromBytes;
+import static org.apache.camel.util.ObjectHelper.isEmpty;
 
 /**
  * Command to display detailed information about a given {@link org.apache.camel.CamelContext}.
  */
 public class ContextInfoCommand extends AbstractContextCommand {
 
+    public static final String XML_TIMESTAMP_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+    public static final String OUTPUT_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss";
     private StringEscape stringEscape;
-    private String mode;
+    private boolean verbose;
 
     /**
      * @param context The name of the Camel context
-     * @param mode Allows for different display modes (--verbose, etc)
+     * @param verbose Whether to output verbose
      */
-    public ContextInfoCommand(String context, String mode) {
+    public ContextInfoCommand(String context, boolean verbose) {
         super(context);
-        this.mode = mode;
+        this.verbose = verbose;
     }
 
     /**
@@ -58,202 +55,187 @@ public class ContextInfoCommand extends AbstractContextCommand {
     }
 
     @Override
-    protected Object performContextCommand(CamelController camelController, CamelContext camelContext, PrintStream out, PrintStream err) throws Exception {
+    protected Object performContextCommand(CamelController camelController, String contextName, PrintStream out, PrintStream err) throws Exception {
+        Map<String, Object> row = camelController.getCamelContextInformation(context);
+        if (row == null || row.isEmpty()) {
+            err.println("Camel context " + context + " not found.");
+            return null;
+        }
 
-        out.println(stringEscape.unescapeJava("\u001B[1m\u001B[33mCamel Context " + context + "\u001B[0m"));
-        out.println(stringEscape.unescapeJava("\tName: " + camelContext.getName()));
-        out.println(stringEscape.unescapeJava("\tManagementName: " + camelContext.getManagementName()));
-        out.println(stringEscape.unescapeJava("\tVersion: " + camelContext.getVersion()));
-        out.println(stringEscape.unescapeJava("\tStatus: " + camelContext.getStatus()));
-        out.println(stringEscape.unescapeJava("\tUptime: " + camelContext.getUptime()));
-
-        // the statistics are in the mbeans
-        printCamelManagedBeansStatus(camelContext, out);
+        out.println("");
+        out.println(stringEscape.unescapeJava("\u001B[1mCamel Context " + context + "\u001B[0m"));
+        out.println(stringEscape.unescapeJava("\tName: " + row.get("name")));
+        out.println(stringEscape.unescapeJava("\tManagementName: " + row.get("managementName")));
+        out.println(stringEscape.unescapeJava("\tVersion: " + row.get("version")));
+        out.println(stringEscape.unescapeJava("\tStatus: " + row.get("status")));
+        out.println(stringEscape.unescapeJava("\tUptime: " + row.get("uptime")));
 
         out.println("");
         out.println(stringEscape.unescapeJava("\u001B[1mMiscellaneous\u001B[0m"));
-        out.println(stringEscape.unescapeJava("\tAuto Startup: " + camelContext.isAutoStartup()));
-        out.println(stringEscape.unescapeJava("\tStarting Routes: " + camelContext.isStartingRoutes()));
-        out.println(stringEscape.unescapeJava("\tSuspended: " + camelContext.isSuspended()));
-        out.println(stringEscape.unescapeJava("\tShutdown timeout: "
-                + camelContext.getShutdownStrategy().getTimeUnit().toSeconds(camelContext.getShutdownStrategy().getTimeout()) + " sec."));
-        out.println(stringEscape.unescapeJava("\tAllow UseOriginalMessage: " + camelContext.isAllowUseOriginalMessage()));
-        out.println(stringEscape.unescapeJava("\tMessage History: " + camelContext.isMessageHistory()));
-        out.println(stringEscape.unescapeJava("\tTracing: " + camelContext.isTracing()));
+        out.println(stringEscape.unescapeJava("\tSuspended: " + row.get("suspended")));
+        out.println(stringEscape.unescapeJava("\tShutdown Timeout: " + row.get("shutdownTimeout") + " sec."));
+        if (row.get("managementStatisticsLevel") != null) {
+            out.println(stringEscape.unescapeJava("\tManagement StatisticsLevel: " + row.get("managementStatisticsLevel")));
+        }
+        out.println(stringEscape.unescapeJava("\tAllow UseOriginalMessage: " + row.get("allowUseOriginalMessage")));
+        out.println(stringEscape.unescapeJava("\tMessage History: " + row.get("messageHistory")));
+        out.println(stringEscape.unescapeJava("\tTracing: " + row.get("tracing")));
+        out.println(stringEscape.unescapeJava("\tLog Mask: " + row.get("logMask")));
         out.println("");
         out.println(stringEscape.unescapeJava("\u001B[1mProperties\u001B[0m"));
-        for (Map.Entry<String, String> entry : camelContext.getProperties().entrySet()) {
-            out.println(stringEscape.unescapeJava("\t" + entry.getKey() + " = " + entry.getValue()));
-        }
-
-        out.println("");
-        out.println(stringEscape.unescapeJava("\u001B[1mAdvanced\u001B[0m"));
-        out.println(stringEscape.unescapeJava("\tClassResolver: " + camelContext.getClassResolver()));
-        out.println(stringEscape.unescapeJava("\tPackageScanClassResolver: " + camelContext.getPackageScanClassResolver()));
-        out.println(stringEscape.unescapeJava("\tApplicationContextClassLoader: " + camelContext.getApplicationContextClassLoader()));
-
-        out.println("");
-        out.println(stringEscape.unescapeJava("\u001B[1mComponents\u001B[0m"));
-        for (String component : camelContext.getComponentNames()) {
-            System.out.println(stringEscape.unescapeJava("\t" + component));
-        }
-
-        out.println("");
-        out.println(stringEscape.unescapeJava("\u001B[1mDataformats\u001B[0m"));
-        for (String name : camelContext.getDataFormats().keySet()) {
-            out.println(stringEscape.unescapeJava("\t" + name));
-        }
-
-        if (mode != null && mode.equals("--verbose")) {
-            out.println("");
-            out.println(stringEscape.unescapeJava("\u001B[1mLanguages\u001B[0m"));
-            for (String language : camelContext.getLanguageNames()) {
-                out.println(stringEscape.unescapeJava("\t" + language));
-            }
-
-            out.println("");
-            out.println(stringEscape.unescapeJava("\u001B[1mEndpoints\u001B[0m"));
-            for (Endpoint endpoint : camelContext.getEndpoints()) {
-                out.println(stringEscape.unescapeJava("\t" + endpoint.getEndpointUri()));
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("property.")) {
+                key = key.substring(9);
+                out.println(stringEscape.unescapeJava("\t" + key + " = " + entry.getValue()));
             }
         }
 
-        out.println("");
-        out.println(stringEscape.unescapeJava("\u001B[1mRoutes\u001B[0m"));
-        for (Route route : camelContext.getRoutes()) {
-            out.println(stringEscape.unescapeJava("\t" + route.getId()));
+        if (verbose) {
+            out.println("");
+            out.println(stringEscape.unescapeJava("\u001B[1mAdvanced\u001B[0m"));
+            out.println(stringEscape.unescapeJava("\tClassResolver: " + row.get("classResolver")));
+            out.println(stringEscape.unescapeJava("\tPackageScanClassResolver: " + row.get("packageScanClassResolver")));
+            out.println(stringEscape.unescapeJava("\tApplicationContextClassLoader: " + row.get("applicationContextClassLoader")));
+
+            printStatistics(camelController, out);
+
+            // add type converter details
+            out.println(stringEscape.unescapeJava("\tNumber of type converters: " + row.get("typeConverter.numberOfTypeConverters")));
+            boolean enabled = false;
+            if (row.get("typeConverter.statisticsEnabled") != null) {
+                enabled = (boolean) row.get("typeConverter.statisticsEnabled");
+            }
+            if (enabled) {
+                long noop = (long) row.get("typeConverter.noopCounter");
+                long attempt = (long) row.get("typeConverter.attemptCounter");
+                long hit = (long) row.get("typeConverter.hitCounter");
+                long miss = (long) row.get("typeConverter.missCounter");
+                long failed = (long) row.get("typeConverter.failedCounter");
+                out.println(stringEscape.unescapeJava(String.format("\tType converter usage: [noop=%s, attempts=%s, hits=%s, misses=%s, failures=%s]", noop, attempt, hit, miss, failed)));
+            }
+
+            // add async processor await details
+            out.println(stringEscape.unescapeJava("\tNumber of blocked threads: " + row.get("asyncProcessorAwaitManager.size")));
+            enabled = false;
+            if (row.get("asyncProcessorAwaitManager.statisticsEnabled") != null) {
+                enabled = (boolean) row.get("asyncProcessorAwaitManager.statisticsEnabled");
+            }
+            if (enabled) {
+                long blocked = (long) row.get("asyncProcessorAwaitManager.threadsBlocked");
+                long interrupted = (long) row.get("asyncProcessorAwaitManager.threadsInterrupted");
+                long total = (long) row.get("asyncProcessorAwaitManager.totalDuration");
+                long min = (long) row.get("asyncProcessorAwaitManager.minDuration");
+                long max = (long) row.get("asyncProcessorAwaitManager.maxDuration");
+                long mean = (long) row.get("asyncProcessorAwaitManager.meanDuration");
+                out.println(stringEscape.unescapeJava(String.format("\tAsyncProcessorAwaitManager usage: [blocked=%s, interrupted=%s, total=%s msec, min=%s msec, max=%s msec, mean=%s msec]",
+                        blocked, interrupted, total, min, max, mean)));
+            }
+
+            // add stream caching details if enabled
+            enabled = (boolean) row.get("streamCachingEnabled");
+            if (enabled) {
+                Object spoolDirectory = safeNull(row.get("streamCaching.spoolDirectory"));
+                Object spoolChiper = safeNull(row.get("streamCaching.spoolChiper"));
+                Object spoolThreshold = safeNull(row.get("streamCaching.spoolThreshold"));
+                Object spoolUsedHeapMemoryThreshold = safeNull(row.get("streamCaching.spoolUsedHeapMemoryThreshold"));
+                Object spoolUsedHeapMemoryLimit = safeNull(row.get("streamCaching.spoolUsedHeapMemoryLimit"));
+                Object anySpoolRules = safeNull(row.get("streamCaching.anySpoolRules"));
+                Object bufferSize = safeNull(row.get("streamCaching.bufferSize"));
+                Object removeSpoolDirectoryWhenStopping = safeNull(row.get("streamCaching.removeSpoolDirectoryWhenStopping"));
+                boolean statisticsEnabled = (boolean) row.get("streamCaching.statisticsEnabled");
+
+                String text = String.format("\tStream caching: [spoolDirectory=%s, spoolChiper=%s, spoolThreshold=%s, spoolUsedHeapMemoryThreshold=%s, "
+                                + "spoolUsedHeapMemoryLimit=%s, anySpoolRules=%s, bufferSize=%s, removeSpoolDirectoryWhenStopping=%s, statisticsEnabled=%s]",
+                        spoolDirectory, spoolChiper, spoolThreshold, spoolUsedHeapMemoryThreshold, spoolUsedHeapMemoryLimit, anySpoolRules, bufferSize,
+                        removeSpoolDirectoryWhenStopping, statisticsEnabled);
+                out.println(stringEscape.unescapeJava(text));
+
+                if (statisticsEnabled) {
+                    Object cacheMemoryCounter = safeNull(row.get("streamCaching.cacheMemoryCounter"));
+                    Object cacheMemorySize = safeNull(row.get("streamCaching.cacheMemorySize"));
+                    Object cacheMemoryAverageSize = safeNull(row.get("streamCaching.cacheMemoryAverageSize"));
+                    Object cacheSpoolCounter = safeNull(row.get("streamCaching.cacheSpoolCounter"));
+                    Object cacheSpoolSize = safeNull(row.get("streamCaching.cacheSpoolSize"));
+                    Object cacheSpoolAverageSize = safeNull(row.get("streamCaching.cacheSpoolAverageSize"));
+
+                    text = String.format("\t                       [cacheMemoryCounter=%s, cacheMemorySize=%s, cacheMemoryAverageSize=%s, cacheSpoolCounter=%s, "
+                            + "cacheSpoolSize=%s, cacheSpoolAverageSize=%s]",
+                            cacheMemoryCounter, cacheMemorySize, cacheMemoryAverageSize, cacheSpoolCounter, cacheSpoolSize, cacheSpoolAverageSize);
+                    out.println(stringEscape.unescapeJava(text));
+                }
+            }
+
+            long totalRoutes = (long) row.get("totalRoutes");
+            long startedRoutes = (long) row.get("totalRoutes");
+            out.println(stringEscape.unescapeJava("\tNumber of running routes: " + startedRoutes));
+            out.println(stringEscape.unescapeJava("\tNumber of not running routes: " + (totalRoutes - startedRoutes)));
         }
 
         return null;
     }
 
-    protected void printCamelManagedBeansStatus(CamelContext camelContext, PrintStream out) throws Exception {
-        // the statistics are in the mbeans
+    protected void printStatistics(CamelController camelController, PrintStream out) throws Exception {
         out.println("");
         out.println(stringEscape.unescapeJava("\u001B[1mStatistics\u001B[0m"));
-        ObjectName contextMBean = null;
-        ManagementAgent agent = camelContext.getManagementStrategy().getManagementAgent();
-        if (agent != null) {
-            MBeanServer mBeanServer = agent.getMBeanServer();
 
-            Set<ObjectName> set = mBeanServer.queryNames(new ObjectName(agent.getMBeanObjectDomainName() + ":type=context,name=\"" + context + "\",*"), null);
-            Iterator<ObjectName> iterator = set.iterator();
-            if (iterator.hasNext()) {
-                contextMBean = iterator.next();
+        String xml = camelController.getCamelContextStatsAsXml(context, true, false);
+        if (xml != null) {
+            JAXBContext context = JAXBContext.newInstance(CamelContextStatDump.class);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
+
+            CamelContextStatDump stat = (CamelContextStatDump) unmarshaller.unmarshal(new StringReader(xml));
+
+            long total = stat.getExchangesCompleted() + stat.getExchangesFailed();
+            out.println(stringEscape.unescapeJava("\tExchanges Total: " + total));
+            out.println(stringEscape.unescapeJava("\tExchanges Completed: " + stat.getExchangesCompleted()));
+            out.println(stringEscape.unescapeJava("\tExchanges Failed: " + stat.getExchangesFailed()));
+            out.println(stringEscape.unescapeJava("\tExchanges Inflight: " + stat.getExchangesInflight()));
+            out.println(stringEscape.unescapeJava("\tMin Processing Time: " + stat.getMinProcessingTime() + " ms"));
+            out.println(stringEscape.unescapeJava("\tMax Processing Time: " + stat.getMaxProcessingTime() + " ms"));
+            out.println(stringEscape.unescapeJava("\tMean Processing Time: " + stat.getMeanProcessingTime() + " ms"));
+            out.println(stringEscape.unescapeJava("\tTotal Processing Time: " + stat.getTotalProcessingTime() + " ms"));
+            out.println(stringEscape.unescapeJava("\tLast Processing Time: " + stat.getLastProcessingTime() + " ms"));
+            out.println(stringEscape.unescapeJava("\tDelta Processing Time: " + stat.getDeltaProcessingTime() + " ms"));
+
+            if (isEmpty(stat.getStartTimestamp())) {
+                // Print an empty value for scripting
+                out.println(stringEscape.unescapeJava("\tStart Statistics Date:"));
+            } else {
+                Date date = new SimpleDateFormat(XML_TIMESTAMP_FORMAT).parse(stat.getStartTimestamp());
+                String text = new SimpleDateFormat(OUTPUT_TIMESTAMP_FORMAT).format(date);
+                out.println(stringEscape.unescapeJava("\tStart Statistics Date: " + text));
             }
 
-            if (mBeanServer.isRegistered(contextMBean)) {
-                Long exchangesTotal = (Long) mBeanServer.getAttribute(contextMBean, "ExchangesTotal");
-                out.println(stringEscape.unescapeJava("\tExchanges Total: " + exchangesTotal));
-                Long exchangesCompleted = (Long) mBeanServer.getAttribute(contextMBean, "ExchangesCompleted");
-                out.println(stringEscape.unescapeJava("\tExchanges Completed: " + exchangesCompleted));
-                Long exchangesFailed = (Long) mBeanServer.getAttribute(contextMBean, "ExchangesFailed");
-                out.println(stringEscape.unescapeJava("\tExchanges Failed: " + exchangesFailed));
-                Long minProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "MinProcessingTime");
-                out.println(stringEscape.unescapeJava("\tMin Processing Time: " + minProcessingTime + "ms"));
-                Long maxProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "MaxProcessingTime");
-                out.println(stringEscape.unescapeJava("\tMax Processing Time: " + maxProcessingTime + "ms"));
-                Long meanProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "MeanProcessingTime");
-                out.println(stringEscape.unescapeJava("\tMean Processing Time: " + meanProcessingTime + "ms"));
-                Long totalProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "TotalProcessingTime");
-                out.println(stringEscape.unescapeJava("\tTotal Processing Time: " + totalProcessingTime + "ms"));
-                Long lastProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "LastProcessingTime");
-                out.println(stringEscape.unescapeJava("\tLast Processing Time: " + lastProcessingTime + "ms"));
-                Long deltaProcessingTime = (Long) mBeanServer.getAttribute(contextMBean, "DeltaProcessingTime");
-                out.println(stringEscape.unescapeJava("\tDelta Processing Time: " + deltaProcessingTime + "ms"));
-
-                String load01 = (String) mBeanServer.getAttribute(contextMBean, "Load01");
-                String load05 = (String) mBeanServer.getAttribute(contextMBean, "Load05");
-                String load15 = (String) mBeanServer.getAttribute(contextMBean, "Load15");
-                out.println(stringEscape.unescapeJava("\tLoad Avg: " + load01 + ", " + load05 + ", " + load15));
-
-                // Test for null to see if a any exchanges have been processed first to avoid NPE
-                Object resetTimestampObj = mBeanServer.getAttribute(contextMBean, "ResetTimestamp");
-                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-                if (resetTimestampObj == null) {
-                    // Print an empty value for scripting
-                    out.println(stringEscape.unescapeJava("\tReset Statistics Date:"));
-                } else {
-                    Date firstExchangeTimestamp = (Date) resetTimestampObj;
-                    out.println(stringEscape.unescapeJava("\tReset Statistics Date: " + format.format(firstExchangeTimestamp)));
-                }
-
-                // Test for null to see if a any exchanges have been processed first to avoid NPE
-                Object firstExchangeTimestampObj = mBeanServer.getAttribute(contextMBean, "FirstExchangeCompletedTimestamp");
-                if (firstExchangeTimestampObj == null) {
-                    // Print an empty value for scripting
-                    out.println(stringEscape.unescapeJava("\tFirst Exchange Date:"));
-                } else {
-                    Date firstExchangeTimestamp = (Date) firstExchangeTimestampObj;
-                    out.println(stringEscape.unescapeJava("\tFirst Exchange Date: " + format.format(firstExchangeTimestamp)));
-                }
-
-                // Again, check for null to avoid NPE
-                Object lastExchangeCompletedTimestampObj = mBeanServer.getAttribute(contextMBean, "LastExchangeCompletedTimestamp");
-                if (lastExchangeCompletedTimestampObj == null) {
-                    // Print an empty value for scripting
-                    out.println(stringEscape.unescapeJava("\tLast Exchange Completed Date:"));
-                } else {
-                    Date lastExchangeCompletedTimestamp = (Date) lastExchangeCompletedTimestampObj;
-                    out.println(stringEscape.unescapeJava("\tLast Exchange Completed Date: " + format.format(lastExchangeCompletedTimestamp)));
-                }
-
-                // add type converter statistics if enabled
-                if (camelContext.getTypeConverterRegistry().getStatistics().isStatisticsEnabled()) {
-                    out.println(stringEscape.unescapeJava(String.format("\tTypeConverterRegistry utilization: [attempts=%s, hits=%s, misses=%s, failures=%s]",
-                            camelContext.getTypeConverterRegistry().getStatistics().getAttemptCounter(),
-                            camelContext.getTypeConverterRegistry().getStatistics().getHitCounter(),
-                            camelContext.getTypeConverterRegistry().getStatistics().getMissCounter(),
-                            camelContext.getTypeConverterRegistry().getStatistics().getFailedCounter())));
-                }
-
-                // add stream caching details if enabled
-                if (camelContext.getStreamCachingStrategy().isEnabled()) {
-                    out.println(stringEscape.unescapeJava(
-                            String.format("\tStreamCachingStrategy: [spoolDirectory=%s, spoolChiper=%s, spoolThreshold=%s, spoolUsedHeapMemoryThreshold=%s, "
-                                            + "spoolUsedHeapMemoryLimit=%s, anySpoolRules=%s, bufferSize=%s, removeSpoolDirectoryWhenStopping=%s, statisticsEnabled=%s]",
-                                    camelContext.getStreamCachingStrategy().getSpoolDirectory(),
-                                    camelContext.getStreamCachingStrategy().getSpoolChiper(),
-                                    camelContext.getStreamCachingStrategy().getSpoolThreshold(),
-                                    camelContext.getStreamCachingStrategy().getSpoolUsedHeapMemoryThreshold(),
-                                    camelContext.getStreamCachingStrategy().getSpoolUsedHeapMemoryLimit(),
-                                    camelContext.getStreamCachingStrategy().isAnySpoolRules(),
-                                    camelContext.getStreamCachingStrategy().getBufferSize(),
-                                    camelContext.getStreamCachingStrategy().isRemoveSpoolDirectoryWhenStopping(),
-                                    camelContext.getStreamCachingStrategy().getStatistics().isStatisticsEnabled())));
-
-                    if (camelContext.getStreamCachingStrategy().getStatistics().isStatisticsEnabled()) {
-                        out.println(stringEscape.unescapeJava(
-                                String.format("\t                       [cacheMemoryCounter=%s, cacheMemorySize=%s, cacheMemoryAverageSize=%s, cacheSpoolCounter=%s, "
-                                                + "cacheSpoolSize=%s, cacheSpoolAverageSize=%s]",
-                                        camelContext.getStreamCachingStrategy().getStatistics().getCacheMemoryCounter(),
-                                        printUnitFromBytes(camelContext.getStreamCachingStrategy().getStatistics().getCacheMemorySize()),
-                                        printUnitFromBytes(camelContext.getStreamCachingStrategy().getStatistics().getCacheMemoryAverageSize()),
-                                        camelContext.getStreamCachingStrategy().getStatistics().getCacheSpoolCounter(),
-                                        printUnitFromBytes(camelContext.getStreamCachingStrategy().getStatistics().getCacheSpoolSize()),
-                                        printUnitFromBytes(camelContext.getStreamCachingStrategy().getStatistics().getCacheSpoolAverageSize()))));
-                    }
-                }
-
-                long activeRoutes = 0;
-                long inactiveRoutes = 0;
-                List<Route> routeList = camelContext.getRoutes();
-                for (Route route : routeList) {
-                    if (camelContext.getRouteStatus(route.getId()).isStarted()) {
-                        activeRoutes++;
-                    } else {
-                        inactiveRoutes++;
-                    }
-                }
-
-                out.println(stringEscape.unescapeJava("\tNumber of running routes: " + activeRoutes));
-                out.println(stringEscape.unescapeJava("\tNumber of not running routes: " + inactiveRoutes));
+            // Test for null to see if a any exchanges have been processed first to avoid NPE
+            if (isEmpty(stat.getResetTimestamp())) {
+                // Print an empty value for scripting
+                out.println(stringEscape.unescapeJava("\tReset Statistics Date:"));
+            } else {
+                Date date = new SimpleDateFormat(XML_TIMESTAMP_FORMAT).parse(stat.getResetTimestamp());
+                String text = new SimpleDateFormat(OUTPUT_TIMESTAMP_FORMAT).format(date);
+                out.println(stringEscape.unescapeJava("\tReset Statistics Date: " + text));
             }
 
-        } else {
-            out.println("");
-            out.println(stringEscape.unescapeJava("\u001B[31mJMX Agent of Camel is not reachable. Maybe it has been disabled on the Camel context"));
-            out.println(stringEscape.unescapeJava("In consequence, some statistics are not available.\u001B[0m"));
+            // Test for null to see if a any exchanges have been processed first to avoid NPE
+            if (isEmpty(stat.getFirstExchangeCompletedTimestamp())) {
+                // Print an empty value for scripting
+                out.println(stringEscape.unescapeJava("\tFirst Exchange Date:"));
+            } else {
+                Date date = new SimpleDateFormat(XML_TIMESTAMP_FORMAT).parse(stat.getFirstExchangeCompletedTimestamp());
+                String text = new SimpleDateFormat(OUTPUT_TIMESTAMP_FORMAT).format(date);
+                out.println(stringEscape.unescapeJava("\tFirst Exchange Date: " + text));
+            }
+
+            // Test for null to see if a any exchanges have been processed first to avoid NPE
+            if (isEmpty(stat.getLastExchangeCompletedTimestamp())) {
+                // Print an empty value for scripting
+                out.println(stringEscape.unescapeJava("\tLast Exchange Date:"));
+            } else {
+                Date date = new SimpleDateFormat(XML_TIMESTAMP_FORMAT).parse(stat.getLastExchangeCompletedTimestamp());
+                String text = new SimpleDateFormat(OUTPUT_TIMESTAMP_FORMAT).format(date);
+                out.println(stringEscape.unescapeJava("\tLast Exchange Date: " + text));
+            }
         }
 
     }

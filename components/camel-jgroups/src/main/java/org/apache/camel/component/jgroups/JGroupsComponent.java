@@ -20,18 +20,18 @@ import java.util.Map;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
-import org.jgroups.Channel;
+import org.apache.camel.spi.Metadata;
+import org.jgroups.JChannel;
 
 /**
  * Component providing support for messages multicasted from- or to JGroups channels ({@code org.jgroups.Channel}).
  */
 public class JGroupsComponent extends UriEndpointComponent {
 
-    private Channel channel;
-
+    private JChannel channel;
     private String channelProperties;
-
-    private Boolean enableViewMessages;
+    @Metadata(label = "consumer")
+    private boolean enableViewMessages;
 
     public JGroupsComponent() {
         super(JGroupsEndpoint.class);
@@ -42,11 +42,14 @@ public class JGroupsComponent extends UriEndpointComponent {
         return new JGroupsEndpoint(uri, this, channel, clusterName, channelProperties, enableViewMessages);
     }
 
-    public Channel getChannel() {
+    public JChannel getChannel() {
         return channel;
     }
 
-    public void setChannel(Channel channel) {
+    /**
+     * Channel to use
+     */
+    public void setChannel(JChannel channel) {
         this.channel = channel;
     }
 
@@ -54,15 +57,22 @@ public class JGroupsComponent extends UriEndpointComponent {
         return channelProperties;
     }
 
+    /**
+     * Specifies configuration properties of the JChannel used by the endpoint.
+     */
     public void setChannelProperties(String channelProperties) {
         this.channelProperties = channelProperties;
     }
 
-    public Boolean getEnableViewMessages() {
+    public boolean isEnableViewMessages() {
         return enableViewMessages;
     }
 
-    public void setEnableViewMessages(Boolean enableViewMessages) {
+    /**
+     * If set to true, the consumer endpoint will receive org.jgroups.View messages as well (not only org.jgroups.Message instances).
+     * By default only regular messages are consumed by the endpoint.
+     */
+    public void setEnableViewMessages(boolean enableViewMessages) {
         this.enableViewMessages = enableViewMessages;
     }
 

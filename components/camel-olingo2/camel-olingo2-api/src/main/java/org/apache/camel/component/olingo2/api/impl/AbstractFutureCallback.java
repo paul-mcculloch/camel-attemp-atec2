@@ -16,20 +16,23 @@
  */
 package org.apache.camel.component.olingo2.api.impl;
 
+import java.io.Closeable;
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 import org.apache.camel.component.olingo2.api.Olingo2ResponseHandler;
-import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.StatusLine;
 import org.apache.http.concurrent.FutureCallback;
+import org.apache.http.entity.ContentType;
 import org.apache.olingo.odata2.api.commons.HttpStatusCodes;
 import org.apache.olingo.odata2.api.ep.EntityProvider;
 import org.apache.olingo.odata2.api.ep.EntityProviderException;
 import org.apache.olingo.odata2.api.exception.ODataApplicationException;
 import org.apache.olingo.odata2.api.exception.ODataException;
 import org.apache.olingo.odata2.api.processor.ODataErrorContext;
-import org.apache.olingo.odata2.core.commons.ContentType;
+
+import static org.apache.camel.component.olingo2.api.impl.Olingo2Helper.getContentTypeHeader;
 
 /**
 * Helper implementation of {@link org.apache.http.concurrent.FutureCallback}
@@ -37,6 +40,7 @@ import org.apache.olingo.odata2.core.commons.ContentType;
 */
 public abstract class AbstractFutureCallback<T> implements FutureCallback<HttpResponse> {
 
+    public static final Pattern ODATA_MIME_TYPE = Pattern.compile("application/((atom)|(json)|(xml)).*");
     private final Olingo2ResponseHandler<T> responseHandler;
 
     AbstractFutureCallback(Olingo2ResponseHandler<T> responseHandler) {
@@ -49,21 +53,16 @@ public abstract class AbstractFutureCallback<T> implements FutureCallback<HttpRe
         if (400 <= httpStatusCode.getStatusCode() && httpStatusCode.getStatusCode() <= 599) {
             if (response.getEntity() != null) {
                 try {
-                    final ContentType responseContentType = ContentType.create(
-                        response.getFirstHeader(HttpHeaders.CONTENT_TYPE).getValue());
+                    final ContentType responseContentType = getContentTypeHeader(response);
 
-                    switch (responseContentType.getODataFormat()) {
-                    case ATOM:
-                    case XML:
-                    case JSON:
+                    final String mimeType = responseContentType.getMimeType();
+                    if (ODATA_MIME_TYPE.matcher(mimeType).matches()) {
                         final ODataErrorContext errorContext = EntityProvider.readErrorDocument(
                             response.getEntity().getContent(),
                             responseContentType.toString());
                         throw new ODataApplicationException(errorContext.getMessage(),
                             errorContext.getLocale(), httpStatusCode, errorContext.getErrorCode(),
                             errorContext.getException());
-                    default:
-                        // fall through to default exception with status line information
                     }
                 } catch (EntityProviderException e) {
                     throw new ODataApplicationException(e.getMessage(), response.getLocale(), httpStatusCode, e);
@@ -87,6 +86,13 @@ public abstract class AbstractFutureCallback<T> implements FutureCallback<HttpRe
             onCompleted(result);
         } catch (Exception e) {
             failed(e);
+        } finally {
+            if (result instanceof Closeable) {
+                try {
+                    ((Closeable) result).close();
+                } catch (final IOException ignore) {
+                }
+            }
         }
     }
 

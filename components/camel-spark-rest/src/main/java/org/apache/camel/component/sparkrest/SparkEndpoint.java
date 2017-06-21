@@ -21,24 +21,28 @@ import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
+import org.apache.camel.spi.UriPath;
 import org.apache.camel.util.ObjectHelper;
 import spark.route.HttpMethod;
 
-@UriEndpoint(scheme = "spark", consumerClass =  SparkConsumer.class)
+/**
+ * The spark-rest component is used for hosting REST services which has been defined using Camel rest-dsl.
+ */
+@UriEndpoint(firstVersion = "2.14.0", scheme = "spark-rest", title = "Spark Rest", syntax = "spark-rest:verb:path", consumerOnly = true, consumerClass =  SparkConsumer.class, label = "rest")
 public class SparkEndpoint extends DefaultEndpoint {
-
-    @UriParam
-    SparkConfiguration sparkConfiguration;
-    @UriParam
-    private SparkBinding sparkBinding;
-    @UriParam
+    @UriPath(enums = "get,post,put,patch,delete,head,trace,connect,options") @Metadata(required = "true")
     private String verb;
-    @UriParam
+    @UriPath @Metadata(required = "true")
     private String path;
     @UriParam
     private String accept;
+    @UriParam
+    private SparkConfiguration sparkConfiguration;
+    @UriParam(label = "advanced")
+    private SparkBinding sparkBinding;
 
     public SparkEndpoint(String endpointUri, Component component) {
         super(endpointUri, component);
@@ -48,6 +52,9 @@ public class SparkEndpoint extends DefaultEndpoint {
         return sparkConfiguration;
     }
 
+    /**
+     * To use the SparkConfiguration
+     */
     public void setSparkConfiguration(SparkConfiguration sparkConfiguration) {
         this.sparkConfiguration = sparkConfiguration;
     }
@@ -56,6 +63,9 @@ public class SparkEndpoint extends DefaultEndpoint {
         return sparkBinding;
     }
 
+    /**
+     * To use a custom SparkBinding to map to/from Camel message.
+     */
     public void setSparkBinding(SparkBinding sparkBinding) {
         this.sparkBinding = sparkBinding;
     }
@@ -64,6 +74,9 @@ public class SparkEndpoint extends DefaultEndpoint {
         return verb;
     }
 
+    /**
+     * get, post, put, patch, delete, head, trace, connect, or options.
+     */
     public void setVerb(String verb) {
         this.verb = verb;
     }
@@ -72,6 +85,9 @@ public class SparkEndpoint extends DefaultEndpoint {
         return path;
     }
 
+    /**
+     * The content path which support Spark syntax.
+     */
     public void setPath(String path) {
         this.path = path;
     }
@@ -80,6 +96,9 @@ public class SparkEndpoint extends DefaultEndpoint {
         return accept;
     }
 
+    /**
+     * Accept type such as: 'text/xml', or 'application/json'. By default we accept all kinds of types.
+     */
     public void setAccept(String accept) {
         this.accept = accept;
     }
@@ -109,7 +128,8 @@ public class SparkEndpoint extends DefaultEndpoint {
         ObjectHelper.notEmpty(verb, "verb", this);
         ObjectHelper.notEmpty(path, "path", this);
 
-        // verb must be supported by Spark
-        HttpMethod.valueOf(verb);
+        // verb must be supported by Spark and lets convert to the actual name
+        HttpMethod method = getCamelContext().getTypeConverter().mandatoryConvertTo(HttpMethod.class, verb);
+        verb = method.name();
     }
 }

@@ -47,6 +47,10 @@ public class ManagedTypeConverterRegistry extends ManagedService implements Mana
         return registry;
     }
 
+    public long getNoopCounter() {
+        return registry.getStatistics().getNoopCounter();
+    }
+
     public long getAttemptCounter() {
         return registry.getStatistics().getAttemptCounter();
     }
@@ -77,6 +81,14 @@ public class ManagedTypeConverterRegistry extends ManagedService implements Mana
 
     public int getNumberOfTypeConverters() {
         return registry.size();
+    }
+
+    public String getTypeConverterExistsLoggingLevel() {
+        return registry.getTypeConverterExistsLoggingLevel().name();
+    }
+
+    public String getTypeConverterExists() {
+        return registry.getTypeConverterExists().name();
     }
 
     public boolean hasTypeConverter(String fromType, String toType) {

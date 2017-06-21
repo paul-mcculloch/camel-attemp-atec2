@@ -35,12 +35,14 @@ import org.apache.hadoop.fs.PathFilter;
 
 public final class HdfsConsumer extends ScheduledPollConsumer {
 
+    public static final long DEFAULT_CONSUMER_INITIAL_DELAY = 10 * 1000L;
+
     private final HdfsConfiguration config;
     private final StringBuilder hdfsPath;
     private final Processor processor;
     private final ReadWriteLock rwlock = new ReentrantReadWriteLock();
     private volatile HdfsInputStream istream;
-
+    
     public HdfsConsumer(HdfsEndpoint endpoint, Processor processor, HdfsConfiguration config) {
         super(endpoint, processor);
         this.config = config;
@@ -138,6 +140,12 @@ public final class HdfsConsumer extends ScheduledPollConsumer {
             try {
                 this.rwlock.writeLock().lock();
                 this.istream = HdfsInputStream.createInputStream(status.getPath().toString(), this.config);
+                if (!this.istream.isOpened()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Skipping file: {} because it doesn't exist anymore", status.getPath().toString());
+                    }
+                    continue;
+                }
             } finally {
                 this.rwlock.writeLock().unlock();
             }
@@ -145,9 +153,9 @@ public final class HdfsConsumer extends ScheduledPollConsumer {
             try {
                 Holder<Object> key = new Holder<Object>();
                 Holder<Object> value = new Holder<Object>();
-                while (this.istream.next(key, value) != 0) {
+                while (this.istream.next(key, value) >= 0) {
                     Exchange exchange = this.getEndpoint().createExchange();
-                    Message message = new DefaultMessage();
+                    Message message = new DefaultMessage(this.getEndpoint().getCamelContext());
                     String fileName = StringUtils.substringAfterLast(status.getPath().toString(), "/");
                     message.setHeader(Exchange.FILE_NAME, fileName);
                     if (key.value != null) {

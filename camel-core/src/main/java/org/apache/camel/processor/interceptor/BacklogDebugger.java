@@ -353,6 +353,14 @@ public class BacklogDebugger extends ServiceSupport implements InterceptStrategy
         }
     }
 
+    public long getFallbackTimeout() {
+        return fallbackTimeout;
+    }
+
+    public void setFallbackTimeout(long fallbackTimeout) {
+        this.fallbackTimeout = fallbackTimeout;
+    }
+
     public void removeMessageHeaderOnBreakpoint(String nodeId, String headerName) {
         SuspendedExchange se = suspendedBreakpoints.get(nodeId);
         if (se != null) {
@@ -413,6 +421,17 @@ public class BacklogDebugger extends ServiceSupport implements InterceptStrategy
 
     public Set<String> getSuspendedBreakpointNodeIds() {
         return new LinkedHashSet<String>(suspendedBreakpoints.keySet());
+    }
+
+    /**
+     * Gets the exchanged suspended at the given breakpoint id or null if there is none at that id.
+     *
+     * @param id - node id for the breakpoint
+     * @return The suspended exchange or null if there isn't one suspended at the given breakpoint.
+     */
+    public Exchange getSuspendedExchange(String id) {
+        SuspendedExchange suspendedExchange = suspendedBreakpoints.get(id);
+        return suspendedExchange != null ? suspendedExchange.getExchange() : null;
     }
 
     public void disableBreakpoint(String nodeId) {
@@ -542,13 +561,13 @@ public class BacklogDebugger extends ServiceSupport implements InterceptStrategy
             final SuspendedExchange se = suspendedBreakpoints.get(nodeId);
             if (se != null) {
                 // now wait until we should continue
-                logger.log("NodeBreakpoint at node " + toNode + " is waiting to continue for exchangeId: " + exchange.getExchangeId());
+                logger.log("NodeBreakpoint at node " + toNode + " is waiting to continue for exchangeId: " + exchangeId);
                 try {
                     boolean hit = se.getLatch().await(fallbackTimeout, TimeUnit.SECONDS);
                     if (!hit) {
-                        logger.log("NodeBreakpoint at node " + toNode + " timed out and is continued exchangeId: " + exchange.getExchangeId(), LoggingLevel.WARN);
+                        logger.log("NodeBreakpoint at node " + toNode + " timed out and is continued exchangeId: " + exchangeId, LoggingLevel.WARN);
                     } else {
-                        logger.log("NodeBreakpoint at node " + toNode + " is continued exchangeId: " + exchange.getExchangeId());
+                        logger.log("NodeBreakpoint at node " + toNode + " is continued exchangeId: " + exchangeId);
                     }
                 } catch (InterruptedException e) {
                     // ignore

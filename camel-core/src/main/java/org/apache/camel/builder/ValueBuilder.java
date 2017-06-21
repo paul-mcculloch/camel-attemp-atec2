@@ -80,6 +80,11 @@ public class ValueBuilder implements Expression, Predicate {
         return onNewPredicate(PredicateBuilder.isEqualTo(expression, right));
     }
 
+    public Predicate isEqualToIgnoreCase(Object value) {
+        Expression right = asExpression(value);
+        return onNewPredicate(PredicateBuilder.isEqualToIgnoreCase(expression, right));
+    }
+
     public Predicate isLessThan(Object value) {
         Expression right = asExpression(value);
         return onNewPredicate(PredicateBuilder.isLessThan(expression, right));
@@ -176,6 +181,20 @@ public class ValueBuilder implements Expression, Predicate {
 
     public ValueBuilder tokenize(String token) {
         Expression newExp = ExpressionBuilder.tokenizeExpression(expression, token);
+        return onNewValueBuilder(newExp);
+    }
+
+    public ValueBuilder tokenize(String token, int group, boolean skipFirst) {
+        return tokenize(token, "" + group, skipFirst);
+    }
+
+    public ValueBuilder tokenize(String token, String group, boolean skipFirst) {
+        Expression newExp = ExpressionBuilder.tokenizeExpression(expression, token);
+        if (group == null && skipFirst) {
+            // wrap in skip first (if group then it has its own skip first logic)
+            newExp = ExpressionBuilder.skipFirstExpression(newExp);
+        }
+        newExp = ExpressionBuilder.groupIteratorExpression(newExp, token, group, skipFirst);
         return onNewValueBuilder(newExp);
     }
 

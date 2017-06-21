@@ -16,14 +16,16 @@
  */
 package org.apache.camel.component.google.calendar;
 
-import java.io.IOException;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest;
 
 import org.apache.camel.RuntimeCamelException;
+import org.apache.camel.TypeConverter;
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarApiName;
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarPropertiesHelper;
+import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.component.AbstractApiProducer;
 import org.apache.camel.util.component.ApiMethod;
 
@@ -40,9 +42,14 @@ public class GoogleCalendarProducer extends AbstractApiProducer<GoogleCalendarAp
     protected Object doInvokeMethod(ApiMethod method, Map<String, Object> properties) throws RuntimeCamelException {
         AbstractGoogleClientRequest request = (AbstractGoogleClientRequest) super.doInvokeMethod(method, properties);
         try {
+            TypeConverter typeConverter = getEndpoint().getCamelContext().getTypeConverter();
+            for (Entry<String, Object> p : properties.entrySet()) {
+                IntrospectionSupport.setProperty(typeConverter, request, p.getKey(), p.getValue());
+            }
             return request.execute();
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeCamelException(e);
         }
     }
+    
 }

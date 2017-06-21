@@ -17,12 +17,11 @@
 package org.apache.camel.processor;
 
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 import org.apache.camel.CamelContext;
@@ -34,6 +33,7 @@ import org.apache.camel.Producer;
 import org.apache.camel.impl.ProducerCache;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.spi.RouteContext;
+import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.MessageHelper;
 import org.apache.camel.util.ServiceHelper;
@@ -163,8 +163,15 @@ public class RecipientListProcessor extends MulticastProcessor {
     public RecipientListProcessor(CamelContext camelContext, ProducerCache producerCache, Iterator<Object> iter, AggregationStrategy aggregationStrategy,
                                   boolean parallelProcessing, ExecutorService executorService, boolean shutdownExecutorService,
                                   boolean streaming, boolean stopOnException, long timeout, Processor onPrepare, boolean shareUnitOfWork, boolean parallelAggregate) {
-        super(camelContext, null, aggregationStrategy, parallelProcessing, executorService, shutdownExecutorService,
-                streaming, stopOnException, timeout, onPrepare, shareUnitOfWork, parallelAggregate);
+        this(camelContext, producerCache, iter, aggregationStrategy, parallelProcessing, executorService, shutdownExecutorService, streaming, stopOnException, timeout, onPrepare,
+             shareUnitOfWork, parallelAggregate, false);
+    }
+
+    public RecipientListProcessor(CamelContext camelContext, ProducerCache producerCache, Iterator<Object> iter, AggregationStrategy aggregationStrategy,
+                                  boolean parallelProcessing, ExecutorService executorService, boolean shutdownExecutorService, boolean streaming, boolean stopOnException,
+                                  long timeout, Processor onPrepare, boolean shareUnitOfWork, boolean parallelAggregate, boolean stopOnAggregateException) {
+        super(camelContext, null, aggregationStrategy, parallelProcessing, executorService, shutdownExecutorService, streaming, stopOnException, timeout, onPrepare,
+              shareUnitOfWork, parallelAggregate, stopOnAggregateException);
         this.producerCache = producerCache;
         this.iter = iter;
     }
@@ -191,7 +198,7 @@ public class RecipientListProcessor extends MulticastProcessor {
             ExchangePattern pattern;
             try {
                 endpoint = resolveEndpoint(exchange, recipient);
-                pattern = resolveExchangePattern(exchange, recipient);
+                pattern = resolveExchangePattern(recipient);
                 producer = producerCache.acquireProducer(endpoint);
             } catch (Exception e) {
                 if (isIgnoreInvalidEndpoints()) {
@@ -254,18 +261,13 @@ public class RecipientListProcessor extends MulticastProcessor {
         return ExchangeHelper.resolveEndpoint(exchange, recipient);
     }
 
-    protected ExchangePattern resolveExchangePattern(Exchange exchange, Object recipient) throws UnsupportedEncodingException, URISyntaxException {
+    protected ExchangePattern resolveExchangePattern(Object recipient) throws UnsupportedEncodingException, URISyntaxException, MalformedURLException {
         // trim strings as end users might have added spaces between separators
         if (recipient instanceof String) {
             String s = ((String) recipient).trim();
             // see if exchangePattern is a parameter in the url
             s = URISupport.normalizeUri(s);
-            URI url = new URI(s);
-            Map<String, Object> parameters = URISupport.parseParameters(url);
-            String pattern = (String) parameters.get("exchangePattern");
-            if (pattern != null) {
-                return ExchangePattern.asEnum(pattern);
-            }
+            return EndpointHelper.resolveExchangePatternFromUrl(s);
         }
         return null;
     }

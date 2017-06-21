@@ -49,17 +49,21 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
     protected Processor failureProcessor;
     protected Endpoint deadLetter;
     protected String deadLetterUri;
+    protected boolean deadLetterHandleNewException = true;
     protected boolean useOriginalMessage;
     protected boolean asyncDelayedRedelivery;
     protected String executorServiceRef;
     protected ScheduledExecutorService executorService;
+    protected Processor onPrepareFailure;
+    protected Processor onExceptionOccurred;
 
     public DefaultErrorHandlerBuilder() {
     }
 
     public Processor createErrorHandler(RouteContext routeContext, Processor processor) throws Exception {
         DefaultErrorHandler answer = new DefaultErrorHandler(routeContext.getCamelContext(), processor, getLogger(), getOnRedelivery(), 
-            getRedeliveryPolicy(), getExceptionPolicyStrategy(), getRetryWhilePolicy(routeContext.getCamelContext()), getExecutorService(routeContext.getCamelContext()));
+            getRedeliveryPolicy(), getExceptionPolicyStrategy(), getRetryWhilePolicy(routeContext.getCamelContext()),
+                getExecutorService(routeContext.getCamelContext()), getOnPrepareFailure(), getOnExceptionOccurred());
         // configure error handler before we can use it
         configure(routeContext, answer);
         return answer;
@@ -103,6 +107,13 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         if (deadLetterUri != null) {
             other.setDeadLetterUri(deadLetterUri);
         }
+        if (onPrepareFailure != null) {
+            other.setOnPrepareFailure(onPrepareFailure);
+        }
+        if (onExceptionOccurred != null) {
+            other.setOnExceptionOccurred(onExceptionOccurred);
+        }
+        other.setDeadLetterHandleNewException(deadLetterHandleNewException);
         other.setUseOriginalMessage(useOriginalMessage);
         other.setAsyncDelayedRedelivery(asyncDelayedRedelivery);
         other.setExecutorServiceRef(executorServiceRef);
@@ -189,6 +200,11 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         return this;
     }
 
+    public DefaultErrorHandlerBuilder logNewException(boolean logNewException) {
+        getRedeliveryPolicy().setLogNewException(logNewException);
+        return this;
+    }
+
     public DefaultErrorHandlerBuilder logExhausted(boolean logExhausted) {
         getRedeliveryPolicy().setLogExhausted(logExhausted);
         return this;
@@ -199,14 +215,19 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         return this;
     }
     
+    public DefaultErrorHandlerBuilder logExhaustedMessageBody(boolean logExhaustedMessageBody) {
+        getRedeliveryPolicy().setLogExhaustedMessageBody(logExhaustedMessageBody);
+        return this;
+    }
+
     public DefaultErrorHandlerBuilder exchangeFormatterRef(String exchangeFormatterRef) {
         getRedeliveryPolicy().setExchangeFormatterRef(exchangeFormatterRef);
         return this;
     }
 
-
     /**
-     * Will allow asynchronous delayed redeliveries.
+     * Will allow asynchronous delayed redeliveries. The route, in particular the consumer's component,
+     * must support the Asynchronous Routing Engine (e.g. seda)
      *
      * @see org.apache.camel.processor.RedeliveryPolicy#setAsyncDelayedRedelivery(boolean)
      * @return the builder
@@ -340,8 +361,62 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         setUseOriginalMessage(true);
         return this;
     }
-    
-    
+
+    /**
+     * Whether the dead letter channel should handle (and ignore) any new exception that may been thrown during sending the
+     * message to the dead letter endpoint.
+     * <p/>
+     * The default value is <tt>true</tt> which means any such kind of exception is handled and ignored. Set this to <tt>false</tt>
+     * to let the exception be propagated back on the {@link org.apache.camel.Exchange}. This can be used in situations
+     * where you use transactions, and want to use Camel's dead letter channel to deal with exceptions during routing,
+     * but if the dead letter channel itself fails because of a new exception being thrown, then by setting this to <tt>false</tt>
+     * the new exceptions is propagated back and set on the {@link org.apache.camel.Exchange}, which allows the transaction
+     * to detect the exception, and rollback.
+     *
+     * @param handleNewException <tt>true</tt> to handle (and ignore), <tt>false</tt> to catch and propagated the exception on the {@link org.apache.camel.Exchange}
+     * @return the builder
+     */
+    public DefaultErrorHandlerBuilder deadLetterHandleNewException(boolean handleNewException) {
+        setDeadLetterHandleNewException(handleNewException);
+        return this;
+    }
+
+    /**
+     * @deprecated use {@link #deadLetterHandleNewException(boolean)}} with value <tt>false</tt>
+     */
+    @Deprecated
+    public DefaultErrorHandlerBuilder checkException() {
+        setDeadLetterHandleNewException(false);
+        return this;
+    }
+
+    /**
+     * Sets a custom {@link org.apache.camel.Processor} to prepare the {@link org.apache.camel.Exchange} before
+     * handled by the failure processor / dead letter channel. This allows for example to enrich the message
+     * before sending to a dead letter queue.
+     *
+     * @param processor the processor
+     * @return the builder
+     */
+    public DefaultErrorHandlerBuilder onPrepareFailure(Processor processor) {
+        setOnPrepareFailure(processor);
+        return this;
+    }
+
+    /**
+     * Sets a custom {@link org.apache.camel.Processor} to process the {@link org.apache.camel.Exchange} just after an exception was thrown.
+     * This allows to execute the processor at the same time the exception was thrown.
+     * <p/>
+     * Important: Any exception thrown from this processor will be ignored.
+     *
+     * @param processor the processor
+     * @return the builder
+     */
+    public DefaultErrorHandlerBuilder onExceptionOccurred(Processor processor) {
+        setOnExceptionOccurred(processor);
+        return this;
+    }
+
     // Properties
     // -------------------------------------------------------------------------
 
@@ -432,6 +507,14 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         this.deadLetterUri = deadLetter.getEndpointUri();
     }
 
+    public boolean isDeadLetterHandleNewException() {
+        return deadLetterHandleNewException;
+    }
+
+    public void setDeadLetterHandleNewException(boolean deadLetterHandleNewException) {
+        this.deadLetterHandleNewException = deadLetterHandleNewException;
+    }
+
     public boolean isUseOriginalMessage() {
         return useOriginalMessage;
     }
@@ -456,10 +539,25 @@ public class DefaultErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         this.executorServiceRef = executorServiceRef;
     }
 
+    public Processor getOnPrepareFailure() {
+        return onPrepareFailure;
+    }
+
+    public void setOnPrepareFailure(Processor onPrepareFailure) {
+        this.onPrepareFailure = onPrepareFailure;
+    }
+
+    public Processor getOnExceptionOccurred() {
+        return onExceptionOccurred;
+    }
+
+    public void setOnExceptionOccurred(Processor onExceptionOccurred) {
+        this.onExceptionOccurred = onExceptionOccurred;
+    }
+
     protected RedeliveryPolicy createRedeliveryPolicy() {
         RedeliveryPolicy policy = new RedeliveryPolicy();
         policy.disableRedelivery();
-        policy.setRedeliveryDelay(0);
         return policy;
     }
 

@@ -42,6 +42,7 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFactory;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
+import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.SucceededChannelFuture;
 import org.jboss.netty.channel.group.ChannelGroup;
 import org.jboss.netty.channel.group.ChannelGroupFuture;
@@ -52,6 +53,8 @@ import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
 import org.jboss.netty.channel.socket.nio.NioDatagramChannelFactory;
 import org.jboss.netty.channel.socket.nio.NioDatagramWorkerPool;
 import org.jboss.netty.channel.socket.nio.WorkerPool;
+import org.jboss.netty.handler.timeout.ReadTimeoutHandler;
+import org.jboss.netty.util.ExternalResourceReleasable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -161,7 +164,12 @@ public class NettyProducer extends DefaultAsyncProducer {
             bossPool = null;
         }
         if (workerPool != null) {
-            workerPool.shutdown();
+            if (workerPool instanceof ExternalResourceReleasable) {
+                // this will first invoke workerPool#shutdown() internally (e.g. org.jboss.netty.channel.socket.nio.AbstractNioWorkerPool)
+                ((ExternalResourceReleasable) workerPool).releaseExternalResources();
+            } else {
+                workerPool.shutdown();
+            }
             workerPool = null;
         }
 
@@ -174,12 +182,14 @@ public class NettyProducer extends DefaultAsyncProducer {
         }
         
         if (channelFactory != null) {
-            channelFactory.shutdown();
+            // this will first invoke channelFactory#shutdown() internally (see it's javadoc)
+            channelFactory.releaseExternalResources();
             channelFactory = null;
         }
         
         if (datagramChannelFactory != null) {
-            datagramChannelFactory.shutdown();
+            // this will first invoke datagramChannelFactory#shutdown() internally (see it's javadoc)
+            datagramChannelFactory.releaseExternalResources();
             datagramChannelFactory = null;
         }
 
@@ -238,6 +248,17 @@ public class NettyProducer extends DefaultAsyncProducer {
             return true;
         }
 
+        if (exchange.getIn().getHeader(NettyConstants.NETTY_REQUEST_TIMEOUT) != null) {
+            long timeoutInMs = exchange.getIn().getHeader(NettyConstants.NETTY_REQUEST_TIMEOUT, Long.class);
+            ChannelHandler oldHandler = existing.getPipeline().get("timeout");
+            ReadTimeoutHandler newHandler = new ReadTimeoutHandler(getEndpoint().getTimer(), timeoutInMs, TimeUnit.MILLISECONDS);
+            if (oldHandler == null) {
+                existing.getPipeline().addBefore("handler", "timeout", newHandler);
+            } else {
+                existing.getPipeline().replace(oldHandler, "timeout", newHandler);
+            }
+        }
+        
         // need to declare as final
         final Channel channel = existing;
         final AsyncCallback producerCallback = new NettyProducerCallback(channel, callback);
@@ -256,9 +277,7 @@ public class NettyProducer extends DefaultAsyncProducer {
             public void operationComplete(ChannelFuture channelFuture) throws Exception {
                 LOG.trace("Operation complete {}", channelFuture);
                 if (!channelFuture.isSuccess()) {
-                    // no success the set the caused exception and signal callback and break
-                    exchange.setException(channelFuture.getCause());
-                    producerCallback.done(false);
+                    // no success then exit, (any exception has been handled by ClientChannelHandler#exceptionCaught)
                     return;
                 }
 

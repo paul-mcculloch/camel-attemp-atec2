@@ -16,6 +16,9 @@
  */
 package org.apache.camel;
 
+/**
+ * An interface to represent an {@link org.apache.camel.Endpoint} which are delegated.
+ */
 public interface DelegateEndpoint extends Endpoint {
 
     /**

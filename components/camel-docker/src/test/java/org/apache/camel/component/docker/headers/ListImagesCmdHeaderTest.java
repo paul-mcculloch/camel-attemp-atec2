@@ -23,6 +23,7 @@ import com.github.dockerjava.api.command.ListImagesCmd;
 import org.apache.camel.component.docker.DockerConstants;
 import org.apache.camel.component.docker.DockerOperation;
 import org.junit.Test;
+import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 
@@ -31,27 +32,27 @@ import org.mockito.Mockito;
  */
 public class ListImagesCmdHeaderTest extends BaseDockerHeaderTest<ListImagesCmd> {
 
-    
+
     @Mock
     private ListImagesCmd mockObject;
-    
+
     @Test
     public void listImageHeaderTest() {
-        
-        String filter = "filter";
+
+        String filter = "{\"dangling\":[\"true\"]}";
         Boolean showAll = true;
-        
+
         Map<String, Object> headers = getDefaultParameters();
         headers.put(DockerConstants.DOCKER_FILTER, filter);
         headers.put(DockerConstants.DOCKER_SHOW_ALL, showAll);
 
-        
+
         template.sendBodyAndHeaders("direct:in", "", headers);
-        
+
         Mockito.verify(dockerClient, Mockito.times(1)).listImagesCmd();
-        Mockito.verify(mockObject, Mockito.times(1)).withFilter(Mockito.eq(filter));
-        Mockito.verify(mockObject, Mockito.times(1)).withShowAll(Mockito.eq(showAll));
-        
+//        Mockito.verify(mockObject, Mockito.times(1)).withFilters(Matchers.eq(filter));
+        Mockito.verify(mockObject, Mockito.times(1)).withShowAll(Matchers.eq(showAll));
+
     }
 
     @Override

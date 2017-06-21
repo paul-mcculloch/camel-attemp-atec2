@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ResourceHelper;
@@ -33,7 +34,9 @@ import org.apache.ibatis.session.SqlSessionFactoryBuilder;
  */
 public class MyBatisComponent extends UriEndpointComponent {
 
+    @Metadata(label = "advanced")
     private SqlSessionFactory sqlSessionFactory;
+    @Metadata(defaultValue = "SqlMapConfig.xml")
     private String configurationUri = "SqlMapConfig.xml";
 
     public MyBatisComponent() {
@@ -49,7 +52,7 @@ public class MyBatisComponent extends UriEndpointComponent {
 
     protected SqlSessionFactory createSqlSessionFactory() throws IOException {
         ObjectHelper.notNull(configurationUri, "configurationUri", this);
-        InputStream is = ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext().getClassResolver(), configurationUri);
+        InputStream is = ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext(), configurationUri);
         try {
             return new SqlSessionFactoryBuilder().build(is);
         } finally {
@@ -61,6 +64,9 @@ public class MyBatisComponent extends UriEndpointComponent {
         return sqlSessionFactory;
     }
 
+    /**
+     * To use the {@link SqlSessionFactory}
+     */
     public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {
         this.sqlSessionFactory = sqlSessionFactory;
     }
@@ -69,6 +75,11 @@ public class MyBatisComponent extends UriEndpointComponent {
         return configurationUri;
     }
 
+    /**
+     * Location of MyBatis xml configuration file.
+     * <p/>
+     * The default value is: SqlMapConfig.xml loaded from the classpath
+     */
     public void setConfigurationUri(String configurationUri) {
         this.configurationUri = configurationUri;
     }

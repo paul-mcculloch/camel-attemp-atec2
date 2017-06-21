@@ -33,7 +33,17 @@ public interface ManagedRouteMBean extends ManagedPerformanceCounterMBean {
     @ManagedAttribute(description = "Route State")
     String getState();
 
+    @ManagedAttribute(description = "Route Uptime [human readable text]")
+    String getUptime();
+
+    @ManagedAttribute(description = "Route Uptime [milliseconds]")
+    long getUptimeMillis();
+
+    /**
+     * @deprecated use {@link #getExchangesInflight()}
+     */
     @ManagedAttribute(description = "Current number of inflight Exchanges")
+    @Deprecated
     Integer getInflightExchanges();
 
     @ManagedAttribute(description = "Camel ID")
@@ -95,6 +105,9 @@ public interface ManagedRouteMBean extends ManagedPerformanceCounterMBean {
     @ManagedOperation(description = "Dumps the route as XML")
     String dumpRouteAsXml() throws Exception;
 
+    @ManagedOperation(description = "Dumps the route as XML")
+    String dumpRouteAsXml(boolean resolvePlaceholders) throws Exception;
+
     @ManagedOperation(description = "Updates the route from XML")
     void updateRouteFromXml(String xml) throws Exception;
 
@@ -109,5 +122,12 @@ public interface ManagedRouteMBean extends ManagedPerformanceCounterMBean {
 
     @ManagedOperation(description = "Returns the JSON representation of all the static endpoints (and possible dynamic) defined in this route")
     String createRouteStaticEndpointJson(boolean includeDynamic);
+
+    @ManagedAttribute(description = "Oldest inflight exchange duration")
+    Long getOldestInflightDuration();
+
+    @ManagedAttribute(description = "Oldest inflight exchange id")
+    String getOldestInflightExchangeId();
+
 
 }

@@ -21,19 +21,33 @@ import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlRootElement;
 
+import org.apache.camel.spi.Metadata;
+
 /**
- * Represents the XML type for &lt;restProperty&gt;.
+ * A key value pair
  */
+@Metadata(label = "rest")
 @XmlRootElement(name = "restProperty")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RestPropertyDefinition {
 
     @XmlAttribute(required = true)
-    String key;
+    private String key;
 
     @XmlAttribute(required = true)
-    String value;
+    private String value;
 
+    public RestPropertyDefinition() {
+    }
+
+    public RestPropertyDefinition(String key, String value) {
+        this.key = key;
+        this.value = value;
+    }
+
+    /**
+     * Property key
+     */
     public void setKey(String key) {
         this.key = key;
     }
@@ -41,7 +55,10 @@ public class RestPropertyDefinition {
     public String getKey() {
         return key;
     }
-    
+
+    /**
+     * Property value
+     */
     public void setValue(String value) {
         this.value = value;
     }

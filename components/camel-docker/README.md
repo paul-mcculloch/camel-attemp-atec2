@@ -19,45 +19,45 @@ All URI option can be passed as Header properties. Values found in a message hea
 | ------------- | ---------------- |
 |containerId|CamelDockerContainerId |
 
-## General Options
+## Configuration
 
-The following parameters can be used with any invocation of the component
+Options on the Docker Endpoint mapped to a *DockerConfiguration* POJO. This object contains the values integral to the communication with the Docker sever as first order attributes along with a Map of additional parameters based on the options for each type of interaction.
 
-The following options are required
+The following are the the primary options for communicating with the Docker server
 
 | Option | Header | Description | Default Value |
 |-----------|-----------|-----------------|-------------------|
 | host     | CamelDockerHost | Docker host | localhost |
-| port      | CamelDockerPort | Docker port | 5000 |
-
-The following are additional optional parameters
-
-| Option | Header | Description | Default Value |
-|-----------|-----------|-----------------|-------------------|
+| port      | CamelDockerPort | Docker port | 2375 |
 | username | CamelDockerUserName | User name to authenticate with | |
 | password | CamelDockerPassword | Password to authenticate with | |
-| email | CamelDockerEmail | Email address associated with the user | |
 | secure | CamelDockerSecure | Use HTTPS communication | false |
+|certPath | CamelDockerCertPath | Location containing the SSL certificate chain | |
+| email | CamelDockerEmail | Email address associated with the user | |
 | requestTimeout | CamelDockerRequestTimeout | Request timeout for response (in seconds) | 30 |
-|certPath | CamelDockerCertPath | Location containing the SSL certificate chain | | 
+|serverAddress | CamelDockerServerAddress | Address of the Docker registry server (If not specified, *host* will be used) | https://index.docker.io/v1/ |
+|maxTotalConnections | CamelDockerMaxTotalConnections | Maximum number of total connections | 100 |
+|maxPerRouteConnections | CamelDockerMaxPerRouteConnections | Maximum number of connections per route | 100 |
+| cmdExecFactory | CamelDockerCmdExecFactory | The fully qualified class name of the DockerCmdExecFactory implementation to use |  com.github.dockerjava.jaxrs.JerseyDockerCmdExecFactory |
 
 
 ## Consumer Operations
 
 | Operation | Options | Description  | Produces |
 | ------------- | ---------------- | ------------- | ---------------- |
-|events| initialRange | Monitor Docker events (Streaming) | Event |
+|events| initialRange | Amount of time in the past to begin receiving events (Long) | Event |
+|statistics| **containerId** | Statistics based on resource usage | Statistics |
 
 ## Producer Operations
 
 The following producer operations are available
 
-### Misc
+### General
 | Operation | Options | Description  | Returns |
 | ------------- | ---------------- | ------------- | ---------------- |
-| auth | | Check auth configuration | |
+| auth | Values obtained from the component general options| Validate auth configuration | AuthResponse |
 | info | | System wide information | Info |
-| ping | | Ping the Docker server | | 
+| ping | | Ping the Docker server |  |
 | version | | Show the docker version information | Version |
 
  
@@ -65,37 +65,44 @@ The following producer operations are available
 
 | Operation | Options | Description | Body Content | Returns |
 | ------------- | ---------------- | ------------- | ---------------- | ---------------- |
-| image/list | filter, showAll | List images | | List&lt;Image&gt; |
-| image/create | **repository** | Create an image | InputStream |CreateImageResponse |
-| image/build | noCache, quiet, remove, tag | Build an image from Dockerfile via stdin | InputStream or File | InputStream |
-| image/pull |  **repository**, registry, tag | Pull an image from the registry | |InputStream |
-| image/push | **name** | Push an image on the registry | InputStream |
-| image/search | **term** | Search for images | | List&lt;SearchItem&gt; |
-| image/remove | **imageId**, force, noPrune | Remove an image | | |
-| image/tag | **imageId**, **repository**, **tag**, **force** | Tag an image into a repository | | |	
+| image/build | noCache, quiet, remove, tag | Build an image from Dockerfile via stdin | **InputStream** or **File** | InputStream |
+| image/create | **repository** | Create an image | **InputStream** |CreateImageResponse |
 | image/inspect | **imageId** | Inspect an image | | InspectImageResponse |
+| image/list | filter, showAll | List images | | List&lt;Image&gt; |
+| image/pull |  **repository**, registry, tag | Pull an image from the registry | |InputStream |
+| image/push | **name**, tag | Push an image on the registry | | InputStream |
+| image/remove | **imageId**, force, noPrune | Remove an image | | |
+| image/search | **term** | Search for images | | List&lt;SearchItem&gt; |
+| image/tag | **imageId**, **repository**, **tag**, **force** | Tag an image into a repository | | |	
 
 ### Containers
 
-| Operation | Options | Description  | Body Content |
+| Operation | Options | Description  | Body Content | Returns |
 | ------------- | ---------------- | ------------- | ---------------- |
-| container/list | showSize, showAll, before, since, limit, List containers | initialRange | List&lt;Container&gt; |
-| container/create | **imageId**, name, exposedPorts, workingDir, disableNetwork, hostname, user, tty, stdInOpen, stdInOnce, memoryLimit, memorySwap, cpuShares, attachStdIn, attachStdOut, attachStdErr, env, cmd, dns, image, volumes, volumesFrom | Create a container | CreateContainerResponse |
-| container/start | **containerId**, binds, links, lxcConf, portBindings, privileged, publishAllPorts, dns, dnsSearch, volumesFrom, networkMode, devices, restartPolicy, capAdd, capDrop | Start a container | | 
-| container/inspect | **containerId** | Inspect a container  | InspectContainerResponse |
-| container/wait | **containerId** | Wait a container | Integer
-| container/log | **containerId**, stdOut, stdErr, timestamps, followStream, tailAll, tail | Get container logs | InputStream |
-| container/attach | **containerId**, stdOut, stdErr, timestamps, logs, followStream | Attach to a container | InputStream |
-| container/stop | **containerId**, timeout | Stop a container | |
+| container/attach | **containerId**, followStream, logs, stdErr, stdOut, timestamps  | Attach to a container | | InputStream |
+| container/commit | **containerId**, author, attachStdErr, attachStdIn, attachStdOut, cmd, disableNetwork, env, exposedPorts, hostname, memory, memorySwap, message, openStdIn, pause, portSpecs, repository, stdInOnce, tag, tty, user, volumes, workingDir | Create a new image from a container's changes | | String |
+| container/copyfile | **containerId**, **resource**, hostPath | Copy files or folders from a container | | InputStream |
+| container/create | **image**, attachStdErr, attachStdIn, attachStdOut, capAdd, capDrop, cmd, cpuShares, disableNetwork, dns, domanName, entrypoint, env, exposedPorts, hostConfig, hostname, memoryLimit, memorySwap, name, portSpecs, stdInOnce, stdInOpen, tty, user, volumes, volumesFrom, workingDir | Create a container |  |CreateContainerResponse |
+| container/diff | **containerId**, containerIdDiff | Differences on the container filesystem | | List&lt;ChangeLog&gt; |
+| container/inspect | **containerId** | Inspect a container  | | InspectContainerResponse |
+| container/kill | **containerId**, signal | Kill a container | | |
+| container/list | before, limit, showSize, showAll, since | List containers | | List&lt;Container&gt; |
+| container/log | **containerId**, followStream, stdErr, stdOut, tail, tailAll, timestamps | Get container logs | | InputStream |
+| container/pause | **containerId** | Pause a container | | |
+| container/remove | **containerId**, force, removeVolumes | Remove a container | | |
 | container/restart | **containerId**, timeout | Restart a container | |
-| container/diff | **containerId** | Inspect changes on a container | ChangeLog |
-| container/kill | **containerId**, signal, | Kill a container | |
-| container/top | **containerId**, psArgs | List processes running in a container | TopContainerResponse |
-| container/pause | **containerId** | Pause a container | |
-| container/unpause | **containerId** | Unpause a container | |
-| container/commit | **containerId**, repository, message, tag, attachStdIn, attachStdOut, attachStdErr, cmd, disableNetwork, pause, env, exposedPorts, hostname, memory, memorySwap, openStdIn, portSpecs, stdInOnce, tty, user, volumes, hostname | Create a new image from a container's changes | String |
-| container/copyfile | **containerId**, **resource**, hostPath | Copy files or folders from a container | InputStream |
-| container/remove | **containerId**, force, removeVolumes | Remove a container | |
+| container/start | **containerId** | Start a container | | |
+| container/stop | **containerId**, timeout | Stop a container | |
+| container/top | **containerId**, psArgs | List processes running in a container | |TopContainerResponse |
+| container/unpause | **containerId** | Unpause a container | | |
+| container/wait | **containerId** | Blocks until a container is stopped | | |
+
+### Exec
+
+| Operation | Options | Description  | Body Content | Returns |
+| ------------- | ---------------- | ------------- | ---------------- |
+| exec/create | **containerId**, attachStdErr, attachStdIn, attachStdOut, cmd, tty | Setup an *exec* instance on a running container | | ExecCreateCmdResponse |
+| exec/start | **containerId**, detach, execId, tty | Starts a previously created *exec* instance | |InputStream |
 
 
 ## Examples

@@ -17,18 +17,19 @@
 package org.apache.camel.component.solr;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.camel.util.IOHelper;
 import org.apache.log4j.Logger;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
-import org.apache.solr.client.solrj.impl.CloudSolrServer;
+import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.cloud.MiniSolrCloudCluster;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.cloud.SolrZkClient;
-import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -61,11 +62,11 @@ public class SolrCloudFixture {
     File testDir;
     SolrZkClient zkClient;
 
-    CloudSolrServer solrClient;
+    CloudSolrClient solrClient;
     
     public SolrCloudFixture(String solrHome) throws Exception {
-       
-        miniCluster = new MiniSolrCloudCluster(1, "/solr", new File(solrHome, "solr-no-core.xml"), null, null);
+        String xml = IOHelper.loadText(new FileInputStream(new File(solrHome, "solr-no-core.xml")));
+        miniCluster = new MiniSolrCloudCluster(1, "/solr", new File("target/tmp").toPath(), xml, null, null);
         String zkAddr = miniCluster.getZkServer().getZkAddress();
         String zkHost = miniCluster.getZkServer().getZkHost();
 
@@ -79,7 +80,7 @@ public class SolrCloudFixture {
             }
         }
 
-        solrClient = new CloudSolrServer(zkAddr, true);
+        solrClient = new CloudSolrClient(zkAddr, true);
         solrClient.connect();
 
         createCollection(solrClient, "collection1", 1, 1, "conf1");
@@ -99,7 +100,7 @@ public class SolrCloudFixture {
         putConfig(confName, zkClient, solrhome, name, name);
     }
 
-    protected NamedList<Object> createCollection(CloudSolrServer server, String name, int numShards,
+    protected NamedList<Object> createCollection(CloudSolrClient server, String name, int numShards,
                                                  int replicationFactor, String configName) throws Exception {
         ModifiableSolrParams modParams = new ModifiableSolrParams();
         modParams.set(CoreAdminParams.ACTION, CollectionAction.CREATE.name());
@@ -132,23 +133,11 @@ public class SolrCloudFixture {
 
         Map<String, Object> props = new HashMap<String, Object>();
         props.put("configName", "conf1");
-        final ZkNodeProps zkProps = new ZkNodeProps(props);
-
-        // zkClient.makePath("/collections/collection1",
-        // ZkStateReader.toJSON(zkProps), CreateMode.PERSISTENT, true);
-        // zkClient.makePath("/collections/collection1/shards",
-        // CreateMode.PERSISTENT, true);
-        // zkClient.makePath("/collections/control_collection",
-        // ZkStateReader.toJSON(zkProps), CreateMode.PERSISTENT, true);
-        // zkClient.makePath("/collections/control_collection/shards",
-        // CreateMode.PERSISTENT, true);
 
         // for now, always upload the config and schema to the canonical names
         putConfig("conf1", zkClient, solrhome, config, "solrconfig.xml");
         putConfig("conf1", zkClient, solrhome, schema, "schema.xml");
 
-        // putConfig("conf1", zkClient, solrhome,
-        // "solrconfig.snippet.randomindexconfig.xml");
         putConfig("conf1", zkClient, solrhome, "stopwords.txt");
         putConfig("conf1", zkClient, solrhome, "stopwords_en.txt");
         putConfig("conf1", zkClient, solrhome, "protwords.txt");
@@ -163,7 +152,7 @@ public class SolrCloudFixture {
     }
 
     public void teardown() throws Exception {
-        solrClient.shutdown();
+        solrClient.close();
         miniCluster.shutdown();
 
         solrClient = null;

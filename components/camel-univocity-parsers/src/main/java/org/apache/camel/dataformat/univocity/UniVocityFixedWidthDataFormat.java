@@ -30,7 +30,7 @@ import com.univocity.parsers.fixed.FixedWidthWriterSettings;
  * This class is the data format that uses the fixed-width uniVocity parser.
  */
 public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<FixedWidthFormat, FixedWidthWriterSettings,
-    FixedWidthWriter, FixedWidthParserSettings, FixedWidthParser, UniVocityFixedWidthDataFormat> {
+        FixedWidthWriter, FixedWidthParserSettings, FixedWidthParser, UniVocityFixedWidthDataFormat> {
     protected int[] fieldLengths;
     protected Boolean skipTrailingCharsUntilNewline;
     protected Boolean recordEndsOnNewline;
@@ -55,7 +55,6 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
      */
     public UniVocityFixedWidthDataFormat setFieldLengths(int[] fieldLengths) {
         this.fieldLengths = fieldLengths;
-        reset();
         return this;
     }
 
@@ -78,7 +77,6 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
      */
     public UniVocityFixedWidthDataFormat setSkipTrailingCharsUntilNewline(Boolean skipTrailingCharsUntilNewline) {
         this.skipTrailingCharsUntilNewline = skipTrailingCharsUntilNewline;
-        reset();
         return this;
     }
 
@@ -101,7 +99,6 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
      */
     public UniVocityFixedWidthDataFormat setRecordEndsOnNewline(Boolean recordEndsOnNewline) {
         this.recordEndsOnNewline = recordEndsOnNewline;
-        reset();
         return this;
     }
 
@@ -126,7 +123,6 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
      */
     public UniVocityFixedWidthDataFormat setPadding(Character padding) {
         this.padding = padding;
-        reset();
         return this;
     }
 
@@ -207,7 +203,7 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
         if (fieldLengths.length != headers.length) {
             throw new IllegalArgumentException("The headers and fieldLengths must have the same number of element in order to use the fixed-width format.");
         }
-        LinkedHashMap<String, Integer> fields = new LinkedHashMap<>();
+        LinkedHashMap<String, Integer> fields = new LinkedHashMap<String, Integer>();
         for (int i = 0; i < headers.length; i++) {
             fields.put(headers[i], fieldLengths[i]);
         }
@@ -215,5 +211,10 @@ public class UniVocityFixedWidthDataFormat extends AbstractUniVocityDataFormat<F
             throw new IllegalArgumentException("The headers cannot have duplicates in order to use the fixed-width format.");
         }
         return new FixedWidthFieldLengths(fields);
+    }
+
+    @Override
+    public String getDataFormatName() {
+        return "univocity-fixed";
     }
 }

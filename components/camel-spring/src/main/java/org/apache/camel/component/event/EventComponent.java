@@ -20,7 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.camel.impl.DefaultComponent;
 import org.apache.camel.impl.UriEndpointComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +30,7 @@ import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ConfigurableApplicationContext;
 
 /**
- * An <a href="http://camel.apache.org/event.html">Event Component</a>
- * for working with Spring ApplicationEvents.
+ * The <a href="http://camel.apache.org/event.html">Event Component</a> is for working with Spring ApplicationEvents.
  * 
  * @version 
  */
@@ -54,6 +52,9 @@ public class EventComponent extends UriEndpointComponent implements ApplicationC
         return applicationContext;
     }
 
+    /**
+     * The Spring ApplicationContext
+     */
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
@@ -68,7 +69,7 @@ public class EventComponent extends UriEndpointComponent implements ApplicationC
     }
 
     protected EventEndpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        EventEndpoint answer = new EventEndpoint(uri, this);
+        EventEndpoint answer = new EventEndpoint(uri, this, remaining);
         setProperties(answer, parameters);
         return answer;
     }

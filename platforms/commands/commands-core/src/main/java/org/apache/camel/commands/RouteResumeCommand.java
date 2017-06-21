@@ -18,9 +18,6 @@ package org.apache.camel.commands;
 
 import java.io.PrintStream;
 
-import org.apache.camel.CamelContext;
-import org.apache.camel.Route;
-
 /**
  * Command to resume a route.
  */
@@ -31,7 +28,7 @@ public class RouteResumeCommand extends AbstractRouteCommand {
     }
 
     @Override
-    public void executeOnRoute(CamelController camelController, CamelContext camelContext, Route camelRoute, PrintStream out, PrintStream err) throws Exception {
-        camelContext.resumeRoute(camelRoute.getId());
+    public void executeOnRoute(CamelController camelController, String contextName, String routeId, PrintStream out, PrintStream err) throws Exception {
+        camelController.resumeRoute(contextName, routeId);
     }
 }

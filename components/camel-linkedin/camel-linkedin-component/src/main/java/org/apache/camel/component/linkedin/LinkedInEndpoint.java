@@ -24,6 +24,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.component.linkedin.api.CommentsResource;
 import org.apache.camel.component.linkedin.api.CompaniesResource;
+import org.apache.camel.component.linkedin.api.EnumQueryParamConverterProvider;
 import org.apache.camel.component.linkedin.api.GroupsResource;
 import org.apache.camel.component.linkedin.api.JobsResource;
 import org.apache.camel.component.linkedin.api.LinkedInOAuthRequestFilter;
@@ -35,6 +36,7 @@ import org.apache.camel.component.linkedin.internal.LinkedInApiName;
 import org.apache.camel.component.linkedin.internal.LinkedInConstants;
 import org.apache.camel.component.linkedin.internal.LinkedInPropertiesHelper;
 import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriParam;
 import org.apache.camel.util.component.AbstractApiEndpoint;
 import org.apache.camel.util.component.ApiMethod;
 import org.apache.camel.util.component.ApiMethodPropertiesHelper;
@@ -42,13 +44,18 @@ import org.apache.cxf.jaxrs.client.JAXRSClientFactory;
 import org.apache.cxf.jaxrs.client.WebClient;
 
 /**
- * Represents a LinkedIn endpoint.
+ * The linkedin component is uses for retrieving LinkedIn user profiles, connections, companies, groups, posts, etc.
  */
-@UriEndpoint(scheme = "linkedin", consumerClass = LinkedInConsumer.class, consumerPrefix = "consumer")
+@UriEndpoint(firstVersion = "2.14.0", scheme = "linkedin", title = "Linkedin", syntax = "linkedin:apiName/methodName", label = "api,cloud,social",
+        consumerClass = LinkedInConsumer.class, lenientProperties = true)
 public class LinkedInEndpoint extends AbstractApiEndpoint<LinkedInApiName, LinkedInConfiguration> {
 
+    protected static final String FIELDS_OPTION = "fields";
     private static final String DEFAULT_FIELDS_SELECTOR = "";
-    private static final String FIELDS_OPTION = "fields";
+
+    @UriParam
+    private final LinkedInConfiguration configuration;
+
     // OAuth request filter
     private LinkedInOAuthRequestFilter requestFilter;
 
@@ -58,7 +65,7 @@ public class LinkedInEndpoint extends AbstractApiEndpoint<LinkedInApiName, Linke
     public LinkedInEndpoint(String uri, LinkedInComponent component,
                          LinkedInApiName apiName, String methodName, LinkedInConfiguration endpointConfiguration) {
         super(uri, component, apiName, methodName, LinkedInApiCollection.getCollection().getHelper(apiName), endpointConfiguration);
-
+        this.configuration = endpointConfiguration;
     }
 
     public Producer createProducer() throws Exception {
@@ -124,7 +131,7 @@ public class LinkedInEndpoint extends AbstractApiEndpoint<LinkedInApiName, Linke
 
         // create endpoint proxy
         resourceProxy = JAXRSClientFactory.create(LinkedInOAuthRequestFilter.BASE_ADDRESS, proxyClass,
-            Arrays.asList(new Object[]{requestFilter}));
+            Arrays.asList(new Object[]{requestFilter, new EnumQueryParamConverterProvider()}));
     }
 
     @Override

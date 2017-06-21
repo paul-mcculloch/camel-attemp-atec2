@@ -17,12 +17,13 @@
 package org.apache.camel.component.hl7;
 
 import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
 
 import ca.uhn.hl7v2.DefaultHapiContext;
 import ca.uhn.hl7v2.HapiContext;
 import ca.uhn.hl7v2.parser.Parser;
 
-class HL7MLLPConfig {
+public class HL7MLLPConfig {
 
     private Charset charset = Charset.defaultCharset();
 
@@ -38,6 +39,12 @@ class HL7MLLPConfig {
     private HapiContext hapiContext = new DefaultHapiContext();
 
     private Parser parser = hapiContext.getGenericParser();
+
+    private boolean produceString = true;
+
+    private CodingErrorAction malformedInputErrorAction = CodingErrorAction.REPORT;
+
+    private CodingErrorAction unmappableCharacterErrorAction = CodingErrorAction.REPORT;
 
     public Charset getCharset() {
         return charset;
@@ -102,5 +109,29 @@ class HL7MLLPConfig {
 
     public void setValidate(boolean validate) {
         parser.getParserConfiguration().setValidating(validate);
+    }
+
+    public boolean isProduceString() {
+        return produceString;
+    }
+
+    public void setProduceString(boolean produceString) {
+        this.produceString = produceString;
+    }
+
+    public CodingErrorAction getMalformedInputErrorAction() {
+        return malformedInputErrorAction;
+    }
+
+    public void setMalformedInputErrorAction(CodingErrorAction malformedInputErrorAction) {
+        this.malformedInputErrorAction = malformedInputErrorAction;
+    }
+
+    public CodingErrorAction getUnmappableCharacterErrorAction() {
+        return unmappableCharacterErrorAction;
+    }
+
+    public void setUnmappableCharacterErrorAction(CodingErrorAction unmappableCharacterErrorAction) {
+        this.unmappableCharacterErrorAction = unmappableCharacterErrorAction;
     }
 }

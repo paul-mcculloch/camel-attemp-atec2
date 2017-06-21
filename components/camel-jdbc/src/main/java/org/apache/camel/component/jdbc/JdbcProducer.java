@@ -23,10 +23,12 @@ import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
 import javax.sql.DataSource;
 
 import org.apache.camel.Exchange;
@@ -89,7 +91,7 @@ public class JdbcProducer extends DefaultProducer {
                 if (conn != null) {
                     conn.rollback();
                 }
-            } catch (SQLException sqle) {
+            } catch (Throwable sqle) {
                 LOG.warn("Error occurred during jdbc rollback. This exception will be ignored.", sqle);
             }
             throw e;
@@ -163,7 +165,7 @@ public class JdbcProducer extends DefaultProducer {
             boolean stmtExecutionResult = ps.execute();
             if (stmtExecutionResult) {
                 rs = ps.getResultSet();
-                shouldCloseResources = setResultSet(exchange, rs);
+                shouldCloseResources = setResultSet(exchange, conn, rs);
             } else {
                 int updateCount = ps.getUpdateCount();
                 // preserve headers
@@ -173,7 +175,7 @@ public class JdbcProducer extends DefaultProducer {
             }
 
             if (shouldRetrieveGeneratedKeys) {
-                setGeneratedKeys(exchange, ps.getGeneratedKeys());
+                setGeneratedKeys(exchange, conn, ps.getGeneratedKeys());
             }
         } finally {
             if (shouldCloseResources) {
@@ -193,7 +195,8 @@ public class JdbcProducer extends DefaultProducer {
             stmt = conn.createStatement();
 
             if (parameters != null && !parameters.isEmpty()) {
-                IntrospectionSupport.setProperties(stmt, parameters);
+                Map<String, Object> copy = new HashMap<String, Object>(parameters);
+                IntrospectionSupport.setProperties(stmt, copy);
             }
 
             LOG.debug("Executing JDBC Statement: {}", sql);
@@ -219,7 +222,7 @@ public class JdbcProducer extends DefaultProducer {
 
             if (stmtExecutionResult) {
                 rs = stmt.getResultSet();
-                shouldCloseResources = setResultSet(exchange, rs);
+                shouldCloseResources = setResultSet(exchange, conn, rs);
             } else {
                 int updateCount = stmt.getUpdateCount();
                 // preserve headers
@@ -229,7 +232,7 @@ public class JdbcProducer extends DefaultProducer {
             }
 
             if (shouldRetrieveGeneratedKeys) {
-                setGeneratedKeys(exchange, stmt.getGeneratedKeys());
+                setGeneratedKeys(exchange, conn, stmt.getGeneratedKeys());
             }
         } finally {
             if (shouldCloseResources) {
@@ -243,9 +246,11 @@ public class JdbcProducer extends DefaultProducer {
     private void closeQuietly(ResultSet rs) {
         if (rs != null) {
             try {
-                rs.close();
-            } catch (SQLException sqle) {
-                LOG.warn("Error by closing result set: " + sqle, sqle);
+                if (!rs.isClosed()) {
+                    rs.close();
+                }
+            } catch (Throwable sqle) {
+                LOG.debug("Error by closing result set", sqle);
             }
         }
     }
@@ -253,9 +258,11 @@ public class JdbcProducer extends DefaultProducer {
     private void closeQuietly(Statement stmt) {
         if (stmt != null) {
             try {
-                stmt.close();
-            } catch (SQLException sqle) {
-                LOG.warn("Error by closing statement: " + sqle, sqle);
+                if (!stmt.isClosed()) {
+                    stmt.close();
+                }
+            } catch (Throwable sqle) {
+                LOG.debug("Error by closing statement", sqle);
             }
         }
     }
@@ -264,8 +271,8 @@ public class JdbcProducer extends DefaultProducer {
         if (con != null && autoCommit != null) {
             try {
                 con.setAutoCommit(autoCommit);
-            } catch (SQLException sqle) {
-                LOG.warn("Error by resetting auto commit to its original value: " + sqle, sqle);
+            } catch (Throwable sqle) {
+                LOG.debug("Error by resetting auto commit to its original value", sqle);
             }
         }
     }
@@ -273,9 +280,11 @@ public class JdbcProducer extends DefaultProducer {
     private void closeQuietly(Connection con) {
         if (con != null) {
             try {
-                con.close();
-            } catch (SQLException sqle) {
-                LOG.warn("Error by closing connection: " + sqle, sqle);
+                if (!con.isClosed()) {
+                    con.close();
+                }
+            } catch (Throwable sqle) {
+                LOG.debug("Error by closing connection", sqle);
             }
         }
     }
@@ -285,12 +294,13 @@ public class JdbcProducer extends DefaultProducer {
      * - {@link JdbcConstants#JDBC_GENERATED_KEYS_ROW_COUNT} : the row count of generated keys
      * - {@link JdbcConstants#JDBC_GENERATED_KEYS_DATA} : the generated keys data
      *
-     * @param exchange The exchange where to store the generated keys
+     * @param exchange      The exchange where to store the generated keys
+     * @param conn          Current JDBC connection
      * @param generatedKeys The result set containing the generated keys
      */
-    protected void setGeneratedKeys(Exchange exchange, ResultSet generatedKeys) throws SQLException {
+    protected void setGeneratedKeys(Exchange exchange, Connection conn, ResultSet generatedKeys) throws SQLException {
         if (generatedKeys != null) {
-            ResultSetIterator iterator = new ResultSetIterator(generatedKeys, getEndpoint().isUseJDBC4ColumnNameAndLabelSemantics());
+            ResultSetIterator iterator = new ResultSetIterator(conn, generatedKeys, getEndpoint().isUseJDBC4ColumnNameAndLabelSemantics(), getEndpoint().isUseGetBytesForBlob());
             List<Map<String, Object>> data = extractRows(iterator);
 
             exchange.getOut().setHeader(JdbcConstants.JDBC_GENERATED_KEYS_ROW_COUNT, data.size());
@@ -303,10 +313,10 @@ public class JdbcProducer extends DefaultProducer {
      *
      * @return whether to close resources
      */
-    protected boolean setResultSet(Exchange exchange, ResultSet rs) throws SQLException {
+    protected boolean setResultSet(Exchange exchange, Connection conn, ResultSet rs) throws SQLException {
         boolean answer = true;
 
-        ResultSetIterator iterator = new ResultSetIterator(rs, getEndpoint().isUseJDBC4ColumnNameAndLabelSemantics());
+        ResultSetIterator iterator = new ResultSetIterator(conn, rs, getEndpoint().isUseJDBC4ColumnNameAndLabelSemantics(), getEndpoint().isUseGetBytesForBlob());
 
         // preserve headers
         exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());

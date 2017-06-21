@@ -17,9 +17,13 @@
 package org.apache.camel.impl;
 
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
@@ -79,36 +83,82 @@ public final class DefaultExchange implements Exchange {
 
     @Override
     public String toString() {
-        return "Exchange[" + (out == null ? in : out) + "]";
+        // do not output information about the message as it may contain sensitive information
+        return String.format("Exchange[%s]", exchangeId == null ? "" : exchangeId);
+    }
+
+    @Override
+    public Date getCreated() {
+        if (hasProperties()) {
+            return getProperty(Exchange.CREATED_TIMESTAMP, Date.class);
+        } else {
+            return null;
+        }
     }
 
     public Exchange copy() {
+        // to be backwards compatible as today
+        return copy(false);
+    }
+
+    public Exchange copy(boolean safeCopy) {
         DefaultExchange exchange = new DefaultExchange(this);
 
-        if (hasProperties()) {
-            exchange.setProperties(safeCopy(getProperties()));
-        }
-        
-        exchange.setIn(getIn().copy());
-        if (hasOut()) {
-            exchange.setOut(getOut().copy());
+        if (safeCopy) {
+            exchange.getIn().setBody(getIn().getBody());
+            exchange.getIn().setFault(getIn().isFault());
+            if (getIn().hasHeaders()) {
+                exchange.getIn().setHeaders(safeCopyHeaders(getIn().getHeaders()));
+                // just copy the attachments here
+                exchange.getIn().copyAttachments(getIn());
+            }
+            if (hasOut()) {
+                exchange.getOut().setBody(getOut().getBody());
+                exchange.getOut().setFault(getOut().isFault());
+                if (getOut().hasHeaders()) {
+                    exchange.getOut().setHeaders(safeCopyHeaders(getOut().getHeaders()));
+                }
+                // Just copy the attachments here
+                exchange.getOut().copyAttachments(getOut());
+            }
+        } else {
+            // old way of doing copy which is @deprecated
+            // TODO: remove this in Camel 3.0, and always do a safe copy
+            exchange.setIn(getIn().copy());
+            if (hasOut()) {
+                exchange.setOut(getOut().copy());
+            }
         }
         exchange.setException(getException());
+
+        // copy properties after body as body may trigger lazy init
+        if (hasProperties()) {
+            exchange.setProperties(safeCopyProperties(getProperties()));
+        }
+
         return exchange;
     }
 
+    private Map<String, Object> safeCopyHeaders(Map<String, Object> headers) {
+        if (headers == null) {
+            return null;
+        }
+
+        return context.getHeadersMapFactory().newMap(headers);
+    }
+
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> safeCopy(Map<String, Object> properties) {
+    private Map<String, Object> safeCopyProperties(Map<String, Object> properties) {
         if (properties == null) {
             return null;
         }
 
-        Map<String, Object> answer = new ConcurrentHashMap<String, Object>(properties);
+        Map<String, Object> answer = createProperties(properties);
 
         // safe copy message history using a defensive copy
         List<MessageHistory> history = (List<MessageHistory>) answer.remove(Exchange.MESSAGE_HISTORY);
         if (history != null) {
-            answer.put(Exchange.MESSAGE_HISTORY, new ArrayList<MessageHistory>(history));
+            answer.put(Exchange.MESSAGE_HISTORY, new LinkedList<>(history));
         }
 
         return answer;
@@ -198,24 +248,34 @@ public final class DefaultExchange implements Exchange {
             return false;
         }
 
+        // store keys to be removed as we cannot loop and remove at the same time in implementations such as HashMap
+        Set<String> toBeRemoved = new HashSet<>();
         boolean matches = false;
-        for (Map.Entry<String, Object> entry : properties.entrySet()) {
-            String key = entry.getKey();
+        for (String key : properties.keySet()) {
             if (EndpointHelper.matchPattern(key, pattern)) {
                 if (excludePatterns != null && isExcludePatternMatch(key, excludePatterns)) {
                     continue;
                 }
                 matches = true;
-                properties.remove(entry.getKey());
+                toBeRemoved.add(key);
             }
-
         }
+
+        if (!toBeRemoved.isEmpty()) {
+            if (toBeRemoved.size() == properties.size()) {
+                // special optimization when all should be removed
+                properties.clear();
+            } else {
+                toBeRemoved.forEach(k -> properties.remove(k));
+            }
+        }
+
         return matches;
     }
 
     public Map<String, Object> getProperties() {
         if (properties == null) {
-            properties = new ConcurrentHashMap<String, Object>();
+            properties = createProperties();
         }
         return properties;
     }
@@ -230,7 +290,7 @@ public final class DefaultExchange implements Exchange {
 
     public Message getIn() {
         if (in == null) {
-            in = new DefaultMessage();
+            in = new DefaultMessage(getContext());
             configureMessage(in);
         }
         return in;
@@ -258,7 +318,7 @@ public final class DefaultExchange implements Exchange {
         // lazy create
         if (out == null) {
             out = (in != null && in instanceof MessageSupport)
-                ? ((MessageSupport)in).newInstance() : new DefaultMessage();
+                ? ((MessageSupport)in).newInstance() : new DefaultMessage(getContext());
             configureMessage(out);
         }
         return out;
@@ -345,7 +405,10 @@ public final class DefaultExchange implements Exchange {
     }
 
     public boolean isFailed() {
-        return (hasOut() && getOut().isFault()) || getException() != null;
+        if (exception != null) {
+            return true;
+        }
+        return hasOut() ? getOut().isFault() : getIn().isFault();
     }
 
     public boolean isTransacted() {
@@ -373,11 +436,9 @@ public final class DefaultExchange implements Exchange {
             // lets avoid adding methods to the Message API, so we use the
             // DefaultMessage to allow component specific messages to extend
             // and implement the isExternalRedelivered method.
-            DefaultMessage msg = getIn(DefaultMessage.class);
-            if (msg != null) {
-                answer = msg.isTransactedRedelivered();
-                // store as property to keep around
-                setProperty(Exchange.EXTERNAL_REDELIVERED, answer);
+            Message msg = getIn();
+            if (msg instanceof DefaultMessage) {
+                answer = ((DefaultMessage) msg).isTransactedRedelivered();
             }
         }
 
@@ -394,7 +455,7 @@ public final class DefaultExchange implements Exchange {
 
     public void setUnitOfWork(UnitOfWork unitOfWork) {
         this.unitOfWork = unitOfWork;
-        if (onCompletions != null) {
+        if (unitOfWork != null && onCompletions != null) {
             // now an unit of work has been assigned so add the on completions
             // we might have registered already
             for (Synchronization onCompletion : onCompletions) {
@@ -461,6 +522,7 @@ public final class DefaultExchange implements Exchange {
         if (message instanceof MessageSupport) {
             MessageSupport messageSupport = (MessageSupport)message;
             messageSupport.setExchange(this);
+            messageSupport.setCamelContext(getContext());
         }
     }
 
@@ -475,7 +537,15 @@ public final class DefaultExchange implements Exchange {
         }
         return answer;
     }
-    
+
+    protected Map<String, Object> createProperties() {
+        return new HashMap<>();
+    }
+
+    protected Map<String, Object> createProperties(Map<String, Object> properties) {
+        return new HashMap<>(properties);
+    }
+
     private static boolean isExcludePatternMatch(String key, String... excludePatterns) {
         for (String pattern : excludePatterns) {
             if (EndpointHelper.matchPattern(key, pattern)) {

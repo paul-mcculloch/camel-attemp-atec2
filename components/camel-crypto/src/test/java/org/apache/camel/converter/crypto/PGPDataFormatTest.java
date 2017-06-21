@@ -59,6 +59,7 @@ import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
 import org.bouncycastle.openpgp.PGPSignature;
 import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.PGPUtil;
+import org.bouncycastle.openpgp.operator.bc.BcKeyFingerprintCalculator;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentSignerBuilder;
 import org.bouncycastle.openpgp.operator.jcajce.JcePBEKeyEncryptionMethodGenerator;
 import org.bouncycastle.openpgp.operator.jcajce.JcePBESecretKeyDecryptorBuilder;
@@ -86,6 +87,7 @@ public class PGPDataFormatTest extends AbstractPGPDataFormatTest {
         encryptor.setKeyUserid("keyflag");
         encryptor.setSignatureKeyUserid("keyflag");
         encryptor.setIntegrity(false);
+        encryptor.setFileName("fileNameABC");
 
         // the following keyring contains a primary key with KeyFlag "Certify" and a subkey for signing and a subkey for encryption
         decryptor.setKeyFileName("org/apache/camel/component/crypto/secringSubKeys.gpg");
@@ -296,17 +298,19 @@ public class PGPDataFormatTest extends AbstractPGPDataFormatTest {
     }
 
     @Test
-    public void testExceptionDecryptorIncorrectInputNoCompression() throws Exception {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-
-        createEncryptedNonCompressedData(bos, PUB_KEY_RING_SUBKEYS_FILE_NAME);
-
-        MockEndpoint mock = getMockEndpoint("mock:exception");
-        mock.expectedMessageCount(1);
-        template.sendBody("direct:subkeyUnmarshal", bos.toByteArray());
-        assertMockEndpointsSatisfied();
-
-        checkThrownException(mock, IllegalArgumentException.class, null, "The input message body has an invalid format.");
+    public void testEncryptSignWithoutCompressedDataPacket() throws Exception {
+        
+        doRoundTripEncryptionTests("direct:encrypt-sign-without-compressed-data-packet");
+//        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+//
+////        createEncryptedNonCompressedData(bos, PUB_KEY_RING_SUBKEYS_FILE_NAME);
+//
+//        MockEndpoint mock = getMockEndpoint("mock:exception");
+//        mock.expectedMessageCount(1);
+//        template.sendBody("direct:encrypt-sign-without-compressed-data-packet", bos.toByteArray());
+//        assertMockEndpointsSatisfied();
+//
+//        //checkThrownException(mock, IllegalArgumentException.class, null, "The input message body has an invalid format.");
     }
 
     @Test
@@ -368,7 +372,8 @@ public class PGPDataFormatTest extends AbstractPGPDataFormatTest {
 
     static PGPSecretKey readSecretKey() throws Exception {
         InputStream input = new ByteArrayInputStream(getSecKeyRing());
-        PGPSecretKeyRingCollection pgpSec = new PGPSecretKeyRingCollection(PGPUtil.getDecoderStream(input));
+        PGPSecretKeyRingCollection pgpSec = new PGPSecretKeyRingCollection(PGPUtil.getDecoderStream(input),
+                                                                           new BcKeyFingerprintCalculator());
 
         @SuppressWarnings("rawtypes")
         Iterator keyRingIter = pgpSec.getKeyRings();
@@ -391,7 +396,8 @@ public class PGPDataFormatTest extends AbstractPGPDataFormatTest {
 
     static PGPPublicKey readPublicKey(String keyringPath) throws Exception {
         InputStream input = new ByteArrayInputStream(getKeyRing(keyringPath));
-        PGPPublicKeyRingCollection pgpPub = new PGPPublicKeyRingCollection(PGPUtil.getDecoderStream(input));
+        PGPPublicKeyRingCollection pgpPub = new PGPPublicKeyRingCollection(PGPUtil.getDecoderStream(input),
+                                                                           new BcKeyFingerprintCalculator());
 
         @SuppressWarnings("rawtypes")
         Iterator keyRingIter = pgpPub.getKeyRings();
@@ -706,7 +712,41 @@ public class PGPDataFormatTest extends AbstractPGPDataFormatTest {
                         .to("mock:unencrypted");
 
             }
-        } };
+        }, new RouteBuilder() {
+            public void configure() throws Exception {
+        
+                // START SNIPPET: pgp-encrypt-sign-without-compressed-data-packet
+                PGPDataFormat pgpEncryptSign = new PGPDataFormat();
+                pgpEncryptSign.setKeyUserid(getKeyUserId());
+                pgpEncryptSign.setSignatureKeyRing(getSecKeyRing());
+                pgpEncryptSign.setSignatureKeyUserid(getKeyUserId());
+                pgpEncryptSign.setSignaturePassword(getKeyPassword());
+                pgpEncryptSign.setProvider(getProvider());
+                pgpEncryptSign.setAlgorithm(SymmetricKeyAlgorithmTags.BLOWFISH);
+                pgpEncryptSign.setHashAlgorithm(HashAlgorithmTags.RIPEMD160);
+                // without compressed data packet
+                pgpEncryptSign.setWithCompressedDataPacket(false);
+        
+                PGPDataFormat pgpVerifyAndDecryptByteArray = new PGPDataFormat();
+                pgpVerifyAndDecryptByteArray.setPassphraseAccessor(getPassphraseAccessor());
+                pgpVerifyAndDecryptByteArray.setEncryptionKeyRing(getSecKeyRing());
+                pgpVerifyAndDecryptByteArray.setProvider(getProvider());
+                // restrict verification to public keys with certain User ID
+                pgpVerifyAndDecryptByteArray.setSignatureKeyUserids(getSignatureKeyUserIds());
+                pgpVerifyAndDecryptByteArray.setSignatureVerificationOption(PGPKeyAccessDataFormat.SIGNATURE_VERIFICATION_OPTION_REQUIRED);
+        
+                from("direct:encrypt-sign-without-compressed-data-packet").streamCaching()
+                // encryption key ring can also be set as header
+                        .setHeader(PGPDataFormat.ENCRYPTION_KEY_RING).constant(getPublicKeyRing()).marshal(pgpEncryptSign)
+                        // it is recommended to remove the header immediately when it is no longer needed
+                        .removeHeader(PGPDataFormat.ENCRYPTION_KEY_RING).to("mock:encrypted")
+                        // signature key ring can also be set as header
+                        .setHeader(PGPDataFormat.SIGNATURE_KEY_RING).constant(getPublicKeyRing()).unmarshal(pgpVerifyAndDecryptByteArray)
+                        // it is recommended to remove the header immediately when it is no longer needed
+                        .removeHeader(PGPDataFormat.SIGNATURE_KEY_RING).to("mock:unencrypted");
+                // END SNIPPET: pgp-encrypt-sign-without-compressed-data-packet
+            }
+        }};
     }
 
     public static byte[] getPublicKeyRing() throws Exception {

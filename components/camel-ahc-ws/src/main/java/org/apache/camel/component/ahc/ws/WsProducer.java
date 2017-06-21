@@ -19,11 +19,10 @@ package org.apache.camel.component.ahc.ws;
 import java.io.IOException;
 import java.io.InputStream;
 
-import com.ning.http.client.websocket.WebSocket;
-
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.impl.DefaultProducer;
+import org.asynchttpclient.ws.WebSocket;
 
 /**
  *
@@ -46,8 +45,8 @@ public class WsProducer extends DefaultProducer {
     public void process(Exchange exchange) throws Exception {
         Message in = exchange.getIn();
         Object message = in.getBody();
-        log.debug("Sending out {}", message);
         if (message != null) {
+            log.debug("Sending out {}", message);
             if (message instanceof String) {
                 sendMessage(getWebSocket(), (String)message, getEndpoint().isUseStreaming());
             } else if (message instanceof byte[]) {
@@ -56,7 +55,7 @@ public class WsProducer extends DefaultProducer {
                 sendStreamMessage(getWebSocket(), (InputStream)message);
             } else {
                 //TODO provide other binding option, for now use the converted string
-                getWebSocket().sendTextMessage(in.getMandatoryBody(String.class));
+                getWebSocket().sendMessage(in.getMandatoryBody(String.class));
             }
         }
     }
@@ -66,15 +65,15 @@ public class WsProducer extends DefaultProducer {
             int p = 0;
             while (p < msg.length()) {
                 if (msg.length() - p < streamBufferSize) {
-                    webSocket.streamText(msg.substring(p), true);
+                    webSocket.stream(msg.substring(p), true);
                     p = msg.length();
                 } else {
-                    webSocket.streamText(msg.substring(p, streamBufferSize), false);
+                    webSocket.stream(msg.substring(p, streamBufferSize), false);
                     p += streamBufferSize;
                 }
             }
         } else {
-            webSocket.sendTextMessage(msg);
+            webSocket.sendMessage(msg);
         }
     }
     
@@ -132,7 +131,7 @@ public class WsProducer extends DefaultProducer {
         }
     }
     
-    private WebSocket getWebSocket() {
+    private WebSocket getWebSocket() throws Exception {
         return getEndpoint().getWebSocket();
     }
 }

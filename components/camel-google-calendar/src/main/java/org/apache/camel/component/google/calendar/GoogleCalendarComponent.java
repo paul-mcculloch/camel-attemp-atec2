@@ -16,22 +16,26 @@
  */
 package org.apache.camel.component.google.calendar;
 
-import com.google.api.services.calendar.Calendar;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
+import com.google.api.services.calendar.Calendar;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarApiCollection;
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarApiName;
-import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.component.AbstractApiComponent;
 
 /**
  * Represents the component that manages {@link GoogleCalendarEndpoint}.
  */
-@UriEndpoint(scheme = "google-calendar", consumerClass = GoogleCalendarConsumer.class, consumerPrefix = "consumer")
 public class GoogleCalendarComponent extends AbstractApiComponent<GoogleCalendarApiName, GoogleCalendarConfiguration, GoogleCalendarApiCollection> {
 
+    @Metadata(label = "advanced")
     private Calendar client;
+    @Metadata(label = "advanced")
     private GoogleCalendarClientFactory clientFactory;
 
     public GoogleCalendarComponent() {
@@ -47,28 +51,60 @@ public class GoogleCalendarComponent extends AbstractApiComponent<GoogleCalendar
         return GoogleCalendarApiName.fromValue(apiNameStr);
     }
 
-    public Calendar getClient() {
+    public Calendar getClient(GoogleCalendarConfiguration config) {
         if (client == null) {
-            client = getClientFactory().makeClient(configuration.getClientId(), configuration.getClientSecret(), configuration.getScopes(), 
-                configuration.getApplicationName(), configuration.getRefreshToken(), configuration.getAccessToken());
+
+            List<String> list = null;
+            if (config.getScopes() != null) {
+                String[] arr = config.getScopes().split(",");
+                list = Arrays.asList(arr);
+            }
+
+            client = getClientFactory().makeClient(config.getClientId(),
+                    config.getClientSecret(), list,
+                    config.getApplicationName(), config.getRefreshToken(),
+                    config.getAccessToken(), config.getEmailAddress(),
+                    config.getP12FileName(), config.getUser());
         }
         return client;
     }
-    
+
     public GoogleCalendarClientFactory getClientFactory() {
         if (clientFactory == null) {
             clientFactory = new BatchGoogleCalendarClientFactory();
         }
         return clientFactory;
     }
-    
+
+    @Override
+    public GoogleCalendarConfiguration getConfiguration() {
+        if (configuration == null) {
+            configuration = new GoogleCalendarConfiguration();
+        }
+        return super.getConfiguration();
+    }
+
+    /**
+     * To use the shared configuration
+     */
+    @Override
+    public void setConfiguration(GoogleCalendarConfiguration configuration) {
+        super.setConfiguration(configuration);
+    }
+
+    /**
+     * To use the GoogleCalendarClientFactory as factory for creating the client.
+     * Will by default use {@link BatchGoogleCalendarClientFactory}
+     */
     public void setClientFactory(GoogleCalendarClientFactory clientFactory) {
         this.clientFactory = clientFactory;
     }
-    
+
     @Override
     protected Endpoint createEndpoint(String uri, String methodName, GoogleCalendarApiName apiName,
                                       GoogleCalendarConfiguration endpointConfiguration) {
+        endpointConfiguration.setApiName(apiName);
+        endpointConfiguration.setMethodName(methodName);
         return new GoogleCalendarEndpoint(uri, this, apiName, methodName, endpointConfiguration);
     }
 }

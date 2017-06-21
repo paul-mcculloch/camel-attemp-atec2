@@ -29,6 +29,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
+import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Map;
@@ -43,13 +44,14 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.xml.DefaultNamespaceContext;
 import org.apache.camel.builder.xml.XPathBuilder;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.DataFormatName;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.jsse.KeyStoreParameters;
 import org.apache.xml.security.encryption.EncryptedData;
@@ -65,7 +67,7 @@ import org.slf4j.LoggerFactory;
 
 
 
-public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
+public class XMLSecurityDataFormat extends ServiceSupport implements DataFormat, DataFormatName, CamelContextAware {
 
     /**
      * @deprecated  Use {@link #XMLSecurityDataFormat(String, Map, boolean, String, String, String, KeyStoreParameters)} instead.
@@ -139,6 +141,7 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
     
     private CamelContext camelContext;
     private DefaultNamespaceContext nsContext = new DefaultNamespaceContext();
+    private boolean addKeyValueForEncryptedKey = true;
         
     public XMLSecurityDataFormat() {
         this.xmlCipherAlgorithm = XMLCipher.TRIPLEDES;
@@ -361,13 +364,17 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
         this.setKeyPassword(keyPassword);
         this.setDigestAlgorithm(digestAlgorithm);
     }
-    
+
+    @Override
+    public String getDataFormatName() {
+        return "secureXML";
+    }
+
     @Override
     public void setCamelContext(CamelContext camelContext) {
         this.camelContext = camelContext;
         try {
             setDefaultsFromContext(camelContext);
-
         } catch (Exception e) {
             throw new IllegalStateException("Could not initialize XMLSecurityDataFormat with camelContext. ", e);
         }
@@ -377,7 +384,17 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
     public CamelContext getCamelContext() {
         return camelContext;
     }
-    
+
+    @Override
+    protected void doStart() throws Exception {
+        // noop
+    }
+
+    @Override
+    protected void doStop() throws Exception {
+        // noop
+    }
+
     /**
      * Sets missing properties that are defined in the Camel context.
      * @deprecated  this operation populates the data format using depreciated properties and will be
@@ -475,8 +492,9 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
         } else {
             keyCipher = XMLCipher.getInstance(XMLCipher.RSA_OAEP, null, digestAlgorithm);
         }
+        
         keyCipher.init(XMLCipher.WRAP_MODE, keyEncryptionKey);
-        encrypt(exchange, document, stream, dataEncryptionKey, keyCipher);
+        encrypt(exchange, document, stream, dataEncryptionKey, keyCipher, keyEncryptionKey);
     }
      
     private void encryptSymmetric(Exchange exchange, Document document, OutputStream stream) throws Exception {
@@ -499,7 +517,7 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
         XMLCipher keyCipher = XMLCipher.getInstance(generateXmlCipherAlgorithmKeyWrap());
         keyCipher.init(XMLCipher.WRAP_MODE, keyEncryptionKey);
         
-        encrypt(exchange, document, stream, dataEncryptionKey, keyCipher);
+        encrypt(exchange, document, stream, dataEncryptionKey, keyCipher, keyEncryptionKey);
     }
     
     
@@ -531,12 +549,12 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
  
     
     private void encrypt(Exchange exchange, Document document, OutputStream stream, Key dataEncryptionKey, 
-                         XMLCipher keyCipher) throws Exception {
+                         XMLCipher keyCipher, Key keyEncryptionKey) throws Exception {
         XMLCipher xmlCipher = XMLCipher.getInstance(xmlCipherAlgorithm);
         xmlCipher.init(XMLCipher.ENCRYPT_MODE, dataEncryptionKey);
 
         if (secureTag.equalsIgnoreCase("")) {
-            embedKeyInfoInEncryptedData(document, keyCipher, xmlCipher, dataEncryptionKey);
+            embedKeyInfoInEncryptedData(document, keyCipher, xmlCipher, dataEncryptionKey, keyEncryptionKey);
             document = xmlCipher.doFinal(document, document.getDocumentElement());
         } else {
                           
@@ -548,7 +566,8 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
             for (int i = 0; i < nodeList.getLength(); i++) {
                 Node node = nodeList.item(i);
                 document = node.getOwnerDocument();
-                embedKeyInfoInEncryptedData(node.getOwnerDocument(), keyCipher, xmlCipher, dataEncryptionKey);
+                embedKeyInfoInEncryptedData(node.getOwnerDocument(), keyCipher, xmlCipher, 
+                                            dataEncryptionKey, keyEncryptionKey);
                 Document temp = xmlCipher.doFinal(node.getOwnerDocument(), (Element) node, getSecureTagContents());
                 document.importNode(temp.getDocumentElement().cloneNode(true), true);
             }    
@@ -603,7 +622,7 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
             keyStorePassword = keyOrTrustStoreParameters.getPassword();
         }
         
-        if (this.keyStore ==  null) {
+        if (this.keyStore == null) {
             throw new IllegalStateException("A key store must be defined for asymmetric key decryption.");
         }
         
@@ -719,10 +738,18 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
         return keyGenerator.generateKey();
     }
 
-    private void embedKeyInfoInEncryptedData(Document document, XMLCipher keyCipher, XMLCipher xmlCipher, Key dataEncryptionkey) 
+    private void embedKeyInfoInEncryptedData(Document document, XMLCipher keyCipher, 
+                                             XMLCipher xmlCipher, Key dataEncryptionkey,
+                                             Key keyEncryptionKey) 
         throws XMLEncryptionException {
 
         EncryptedKey encryptedKey = keyCipher.encryptKey(document, dataEncryptionkey, mgfAlgorithm, null);
+        if (addKeyValueForEncryptedKey && keyEncryptionKey instanceof PublicKey) {
+            KeyInfo keyInfo = new KeyInfo(document);
+            keyInfo.add((PublicKey)keyEncryptionKey);
+            encryptedKey.setKeyInfo(keyInfo);
+        }
+        
         KeyInfo keyInfo = new KeyInfo(document);
         keyInfo.add(encryptedKey);    
         EncryptedData encryptedDataElement = xmlCipher.getEncryptedData();
@@ -1045,6 +1072,14 @@ public class XMLSecurityDataFormat implements DataFormat, CamelContextAware {
 
     public void setMgfAlgorithm(String mgfAlgorithm) {
         this.mgfAlgorithm = mgfAlgorithm;
+    }
+
+    public boolean isAddKeyValueForEncryptedKey() {
+        return addKeyValueForEncryptedKey;
+    }
+
+    public void setAddKeyValueForEncryptedKey(boolean addKeyValueForEncryptedKey) {
+        this.addKeyValueForEncryptedKey = addKeyValueForEncryptedKey;
     }
 
 }

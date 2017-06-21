@@ -30,6 +30,7 @@ import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.Route;
 import org.apache.camel.Traceable;
+import org.apache.camel.spi.IdAware;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.support.SynchronizationAdapter;
 import org.apache.camel.util.AsyncProcessorHelper;
@@ -45,10 +46,11 @@ import static org.apache.camel.util.ObjectHelper.notNull;
  *
  * @version 
  */
-public class OnCompletionProcessor extends ServiceSupport implements AsyncProcessor, Traceable {
+public class OnCompletionProcessor extends ServiceSupport implements AsyncProcessor, Traceable, IdAware {
 
     private static final Logger LOG = LoggerFactory.getLogger(OnCompletionProcessor.class);
     private final CamelContext camelContext;
+    private String id;
     private final Processor processor;
     private final ExecutorService executorService;
     private final boolean shutdownExecutorService;
@@ -95,6 +97,14 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
         return camelContext;
     }
 
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
     public void process(Exchange exchange) throws Exception {
         AsyncProcessorHelper.process(this, exchange);
     }
@@ -127,9 +137,9 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
     protected static void doProcess(Processor processor, Exchange exchange) {
         // must remember some properties which we cannot use during onCompletion processing
         // as otherwise we may cause issues
+        // but keep the caused exception stored as a property (Exchange.EXCEPTION_CAUGHT) on the exchange
         Object stop = exchange.removeProperty(Exchange.ROUTE_STOP);
         Object failureHandled = exchange.removeProperty(Exchange.FAILURE_HANDLED);
-        Object caught = exchange.removeProperty(Exchange.EXCEPTION_CAUGHT);
         Object errorhandlerHandled = exchange.removeProperty(Exchange.ERRORHANDLER_HANDLED);
         Object rollbackOnly = exchange.removeProperty(Exchange.ROLLBACK_ONLY);
         Object rollbackOnlyLast = exchange.removeProperty(Exchange.ROLLBACK_ONLY_LAST);
@@ -149,9 +159,6 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
             if (failureHandled != null) {
                 exchange.setProperty(Exchange.FAILURE_HANDLED, failureHandled);
             }
-            if (caught != null) {
-                exchange.setProperty(Exchange.EXCEPTION_CAUGHT, caught);
-            }
             if (errorhandlerHandled != null) {
                 exchange.setProperty(Exchange.ERRORHANDLER_HANDLED, errorhandlerHandled);
             }
@@ -159,7 +166,7 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
                 exchange.setProperty(Exchange.ROLLBACK_ONLY, rollbackOnly);
             }
             if (rollbackOnlyLast != null) {
-                exchange.setProperty(Exchange.ROLLBACK_ONLY, rollbackOnlyLast);
+                exchange.setProperty(Exchange.ROLLBACK_ONLY_LAST, rollbackOnlyLast);
             }
             if (cause != null) {
                 exchange.setException(cause);
@@ -196,7 +203,7 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
         if (useOriginalBody) {
             LOG.trace("Using the original IN message instead of current");
 
-            Message original = exchange.getUnitOfWork().getOriginalInMessage();
+            Message original = ExchangeHelper.getOriginalInMessage(exchange);
             answer.setIn(original);
         }
 
@@ -256,9 +263,16 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
             // must use a copy as we dont want it to cause side effects of the original exchange
             final Exchange copy = prepareExchange(exchange);
             final Exception original = copy.getException();
+            final boolean originalFault = copy.hasOut() ? copy.getOut().isFault() : copy.getIn().isFault();
             // must remove exception otherwise onFailure routing will fail as well
             // the caused exception is stored as a property (Exchange.EXCEPTION_CAUGHT) on the exchange
             copy.setException(null);
+            // must clear fault otherwise onFailure routing will fail as well
+            if (copy.hasOut()) {
+                copy.getOut().setFault(false);
+            } else {
+                copy.getIn().setFault(false);
+            }
 
             if (executorService != null) {
                 executorService.submit(new Callable<Exchange>() {
@@ -276,6 +290,12 @@ public class OnCompletionProcessor extends ServiceSupport implements AsyncProces
                 doProcess(processor, copy);
                 // restore exception after processing
                 copy.setException(original);
+                // restore fault after processing
+                if (copy.hasOut()) {
+                    copy.getOut().setFault(originalFault);
+                } else {
+                    copy.getIn().setFault(originalFault);
+                }
             }
         }
 

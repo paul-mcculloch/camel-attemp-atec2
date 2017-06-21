@@ -30,6 +30,7 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.Route;
 import org.apache.camel.management.event.ExchangeCompletedEvent;
 import org.apache.camel.support.EventNotifierSupport;
+import org.apache.camel.support.RoutePolicySupport;
 import org.apache.camel.util.CamelLogger;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
@@ -237,14 +238,14 @@ public class ThrottlingInflightRoutePolicy extends RoutePolicySupport implements
     }
 
     private void startConsumer(int size, Consumer consumer) throws Exception {
-        boolean started = super.startConsumer(consumer);
+        boolean started = resumeOrStartConsumer(consumer);
         if (started) {
             getLogger().log("Throttling consumer: " + size + " <= " + resumeInflightExchanges + " inflight exchange by resuming consumer: " + consumer);
         }
     }
 
     private void stopConsumer(int size, Consumer consumer) throws Exception {
-        boolean stopped = super.stopConsumer(consumer);
+        boolean stopped = suspendOrStopConsumer(consumer);
         if (stopped) {
             getLogger().log("Throttling consumer: " + size + " > " + maxInflightExchanges + " inflight exchange by suspending consumer: " + consumer);
         }

@@ -23,21 +23,23 @@ import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.camel.Endpoint;
-import org.apache.camel.spi.Required;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
 
 /**
- * Represents an XML &lt;from/&gt; element
+ * Act as a message source as input to a route
  *
  * @version 
  */
+@Metadata(label = "eip,endpoint,routing")
 @XmlRootElement(name = "from")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class FromDefinition extends OptionalIdentifiedDefinition<FromDefinition> implements EndpointRequiredDefinition {
-    @XmlAttribute
+    @XmlAttribute @Metadata(required = "true")
     private String uri;
     @XmlAttribute
+    @Deprecated
     private String ref;
     @XmlTransient
     private Endpoint endpoint;
@@ -56,11 +58,6 @@ public class FromDefinition extends OptionalIdentifiedDefinition<FromDefinition>
     @Override
     public String toString() {
         return "From[" + getLabel() + "]";
-    }
-
-    @Override
-    public String getShortName() {
-        return "from";
     }
 
     public String getLabel() {
@@ -98,7 +95,6 @@ public class FromDefinition extends OptionalIdentifiedDefinition<FromDefinition>
      *
      * @param uri the endpoint URI to use
      */
-    @Required
     public void setUri(String uri) {
         clear();
         this.uri = uri;
@@ -113,7 +109,9 @@ public class FromDefinition extends OptionalIdentifiedDefinition<FromDefinition>
      * ApplicationContext or JNDI) to use
      *
      * @param ref the reference name to use
+     * @deprecated use uri with ref:uri instead
      */
+    @Deprecated
     public void setRef(String ref) {
         clear();
         this.ref = ref;

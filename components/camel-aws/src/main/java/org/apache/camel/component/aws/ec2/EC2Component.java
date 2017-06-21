@@ -20,34 +20,32 @@ import java.util.Map;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
-import org.apache.camel.impl.DefaultComponent;
+import org.apache.camel.impl.UriEndpointComponent;
 
 /**
- * Defines the <a href="http://aws.amazon.com/simpledb/">AWS EC2 component</a> 
+ * For working with Amazon's Elastic Compute Cloud (EC2).
  */
-public class EC2Component extends DefaultComponent {
+public class EC2Component extends UriEndpointComponent {
 
     public EC2Component() {
+        super(EC2Endpoint.class);
     }
-
+    
     public EC2Component(CamelContext context) {
-        super(context);
+        super(context, EC2Endpoint.class);
     }
 
+    @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
         EC2Configuration configuration = new EC2Configuration();
         setProperties(configuration, parameters);
-
-        if (remaining == null || remaining.trim().length() == 0) {
-            throw new IllegalArgumentException("operation must be specified.");
+        
+        if (configuration.getAmazonEc2Client() == null) {
+            throw new IllegalArgumentException("amazonEC2Client must be specified");
         }
-        configuration.setOperation(EC2Operations.valueOf(remaining));
-
-        if (configuration.getAmazonEC2Client() == null && (configuration.getAccessKey() == null || configuration.getSecretKey() == null)) {
-            throw new IllegalArgumentException("amazonEC2Client or accessKey and secretKey must be specified");
-        }
-
+        
         EC2Endpoint endpoint = new EC2Endpoint(uri, this, configuration);
         return endpoint;
     }
+
 }

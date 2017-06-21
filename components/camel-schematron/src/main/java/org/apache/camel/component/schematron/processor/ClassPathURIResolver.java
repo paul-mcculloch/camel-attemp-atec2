@@ -16,31 +16,41 @@
  */
 package org.apache.camel.component.schematron.processor;
 
-import java.io.File;
+import java.io.InputStream;
 import javax.xml.transform.Source;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.URIResolver;
 import javax.xml.transform.stream.StreamSource;
 
-
 /**
  * Class path resolver for schematron templates
- *
  */
 public class ClassPathURIResolver implements URIResolver {
 
-    private String rulesDir;
+    private final String rulesDir;
+    private final URIResolver clientUriResolver;
 
     /**
-     * Constructor setter for rules directory path.
-     * @param rulesDir
+     * Constructor setter for rules directory path, and the fallback URIResolver used
+     * for schematron includes.
      */
-    public ClassPathURIResolver(final String rulesDir) {
+    public ClassPathURIResolver(final String rulesDir, URIResolver clientUriResolver) {
         this.rulesDir = rulesDir;
+        this.clientUriResolver = clientUriResolver;
     }
 
     @Override
     public Source resolve(String href, String base) throws TransformerException {
-        return new StreamSource(ClassLoader.getSystemResourceAsStream(rulesDir.concat(File.separator).concat(href)));
+        InputStream stream = ClassPathURIResolver.class.getClassLoader()
+                .getResourceAsStream(rulesDir.concat("/").concat(href));
+        if (stream != null) {
+            return new StreamSource(stream);
+        } else {
+            if (clientUriResolver != null) {
+                return clientUriResolver.resolve(href, base);
+            } else {
+                return new StreamSource(stream);
+            }
+        }
     }
 }

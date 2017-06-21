@@ -29,6 +29,7 @@ public class ProcessorDefinitionHelperTest extends ContextTestSupport {
         Iterator<ProcessorDefinition> it = ProcessorDefinitionHelper.filterTypeInOutputs(route.getOutputs(), ProcessorDefinition.class);
         assertNotNull(it);
 
+        assertEquals("choice1", it.next().getId());
         assertEquals("whenfoo", it.next().getId());
         assertEquals("foo", it.next().getId());
         assertEquals("whenbar", it.next().getId());

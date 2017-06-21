@@ -19,10 +19,13 @@ package org.apache.camel.karaf.commands.internal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.camel.CamelContext;
-import org.apache.camel.commands.AbstractCamelController;
+import org.apache.camel.commands.AbstractLocalCamelController;
+import org.apache.karaf.shell.api.action.lifecycle.Reference;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.slf4j.Logger;
@@ -31,17 +34,19 @@ import org.slf4j.LoggerFactory;
 /**
  * Implementation of <code>CamelController</code>.
  */
-public class CamelControllerImpl extends AbstractCamelController {
+public class CamelControllerImpl extends AbstractLocalCamelController {
 
     private static final Logger LOG = LoggerFactory.getLogger(CamelControllerImpl.class);
 
+    @Reference
     private BundleContext bundleContext;
 
     public void setBundleContext(BundleContext bundleContext) {
         this.bundleContext = bundleContext;
     }
 
-    public List<CamelContext> getCamelContexts() {
+    @Override
+    public List<CamelContext> getLocalCamelContexts() {
         List<CamelContext> camelContexts = new ArrayList<CamelContext>();
         try {
             ServiceReference<?>[] references = bundleContext.getServiceReferences(CamelContext.class.getName(), null);
@@ -68,6 +73,31 @@ public class CamelControllerImpl extends AbstractCamelController {
         });
 
         return camelContexts;
+    }
+
+    @Override
+    public List<Map<String, String>> getCamelContexts() throws Exception {
+        List<Map<String, String>> answer = new ArrayList<Map<String, String>>();
+
+        List<CamelContext> camelContexts = getLocalCamelContexts();
+        for (CamelContext camelContext : camelContexts) {
+            Map<String, String> row = new LinkedHashMap<String, String>();
+            row.put("name", camelContext.getName());
+            row.put("state", camelContext.getStatus().name());
+            row.put("uptime", camelContext.getUptime());
+            if (camelContext.getManagedCamelContext() != null) {
+                row.put("exchangesTotal", "" + camelContext.getManagedCamelContext().getExchangesTotal());
+                row.put("exchangesInflight", "" + camelContext.getManagedCamelContext().getExchangesInflight());
+                row.put("exchangesFailed", "" + camelContext.getManagedCamelContext().getExchangesFailed());
+            } else {
+                row.put("exchangesTotal", "0");
+                row.put("exchangesInflight", "0");
+                row.put("exchangesFailed", "0");
+            }
+            answer.add(row);
+        }
+
+        return answer;
     }
 
 }

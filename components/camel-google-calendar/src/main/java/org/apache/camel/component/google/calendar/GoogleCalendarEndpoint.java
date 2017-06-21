@@ -28,22 +28,27 @@ import org.apache.camel.component.google.calendar.internal.GoogleCalendarApiName
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarConstants;
 import org.apache.camel.component.google.calendar.internal.GoogleCalendarPropertiesHelper;
 import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriParam;
 import org.apache.camel.util.component.AbstractApiEndpoint;
 import org.apache.camel.util.component.ApiMethod;
 import org.apache.camel.util.component.ApiMethodPropertiesHelper;
 
 /**
- * Represents a GoogleCalendar endpoint.
+ * The google-calendar component provides access to Google Calendar.
  */
-@UriEndpoint(scheme = "google-calendar", consumerClass = GoogleCalendarConsumer.class, consumerPrefix = "consumer")
+@UriEndpoint(firstVersion = "2.15.0", scheme = "google-calendar", title = "Google Calendar", syntax = "google-calendar:apiName/methodName",
+consumerClass = GoogleCalendarConsumer.class, consumerPrefix = "consumer", label = "api,cloud")
 public class GoogleCalendarEndpoint extends AbstractApiEndpoint<GoogleCalendarApiName, GoogleCalendarConfiguration> {
+
+    @UriParam
+    private GoogleCalendarConfiguration configuration;
 
     private Object apiProxy;
 
     public GoogleCalendarEndpoint(String uri, GoogleCalendarComponent component,
                          GoogleCalendarApiName apiName, String methodName, GoogleCalendarConfiguration endpointConfiguration) {
         super(uri, component, apiName, methodName, GoogleCalendarApiCollection.getCollection().getHelper(apiName), endpointConfiguration);
-
+        this.configuration = endpointConfiguration;
     }
 
     @Override
@@ -106,11 +111,19 @@ public class GoogleCalendarEndpoint extends AbstractApiEndpoint<GoogleCalendarAp
     }
 
     public Calendar getClient() {
-        return ((GoogleCalendarComponent)getComponent()).getClient();
+        return ((GoogleCalendarComponent)getComponent()).getClient(configuration);
     }
     
     @Override
     public Object getApiProxy(ApiMethod method, Map<String, Object> args) {
         return apiProxy;
+    }
+    
+    public GoogleCalendarClientFactory getClientFactory() {
+        return ((GoogleCalendarComponent)getComponent()).getClientFactory();
+    }
+
+    public void setClientFactory(GoogleCalendarClientFactory clientFactory) {
+        ((GoogleCalendarComponent)getComponent()).setClientFactory(clientFactory);
     }
 }

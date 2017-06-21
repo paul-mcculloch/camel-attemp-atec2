@@ -27,12 +27,15 @@ public interface SmppConstants {
     String COMMAND_ID = "CamelSmppCommandId";
     String COMMAND_STATUS = "CamelSmppCommandStatus";
     String DATA_CODING = "CamelSmppDataCoding";
+    String DATA_SPLITTER = "CamelSmppSplitter";
     String DELIVERED = "CamelSmppDelivered";
     String DEST_ADDR = "CamelSmppDestAddr";
     String DEST_ADDR_NPI = "CamelSmppDestAddrNpi";
     String DEST_ADDR_TON = "CamelSmppDestAddrTon";
     String DONE_DATE = "CamelSmppDoneDate";
+    String ENCODING = "CamelSmppEncoding";
     String ERROR = "CamelSmppError";
+    String ESM_CLASS = "CamelSmppClass";
     String ESME_ADDR = "CamelSmppEsmeAddr";
     String ESME_ADDR_NPI = "CamelSmppEsmeAddrNpi";
     String ESME_ADDR_TON = "CamelSmppEsmeAddrTon";
@@ -59,6 +62,7 @@ public interface SmppConstants {
     String VALIDITY_PERIOD = "CamelSmppValidityPeriod";
     String OPTIONAL_PARAMETERS = "CamelSmppOptionalParameters";
     String OPTIONAL_PARAMETER = "CamelSmppOptionalParameter";
+    String SPLITTING_POLICY = "CamelSmppSplittingPolicy";
 
     String UCS2_ENCODING = "UTF-16BE";
     byte UNKNOWN_ALPHABET = -1;

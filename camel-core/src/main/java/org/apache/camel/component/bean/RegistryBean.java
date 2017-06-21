@@ -20,7 +20,6 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.NoSuchBeanException;
 import org.apache.camel.Processor;
 import org.apache.camel.spi.Registry;
-import org.apache.camel.util.CamelContextHelper;
 
 /**
  * An implementation of a {@link BeanHolder} which will look up a bean from the registry and act as a cache of its metadata
@@ -36,15 +35,24 @@ public class RegistryBean implements BeanHolder {
     private ParameterMappingStrategy parameterMappingStrategy;
 
     public RegistryBean(CamelContext context, String name) {
-        this.context = context;
-        this.name = name;
-        this.registry = context.getRegistry();
+        this(context.getRegistry(), context, name);
     }
 
     public RegistryBean(Registry registry, CamelContext context, String name) {
         this.registry = registry;
         this.context = context;
-        this.name = name;
+        if (name != null) {
+            // for ref it may have "ref:" or "bean:" as prefix by mistake
+            if (name.startsWith("ref:")) {
+                this.name = name.substring(4);
+            } else if (name.startsWith("bean:")) {
+                this.name = name.substring(5);
+            } else {
+                this.name = name;
+            }
+        } else {
+            this.name = null;
+        }
     }
 
     @Override
@@ -92,6 +100,10 @@ public class RegistryBean implements BeanHolder {
 
     public Processor getProcessor() {
         return null;
+    }
+
+    public boolean supportProcessor() {
+        return false;
     }
 
     public BeanInfo getBeanInfo() {

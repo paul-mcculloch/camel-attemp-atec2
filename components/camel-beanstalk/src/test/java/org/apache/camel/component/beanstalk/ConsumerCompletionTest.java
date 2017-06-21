@@ -16,14 +16,18 @@
  */
 package org.apache.camel.component.beanstalk;
 
+import java.util.concurrent.TimeUnit;
+
 import com.surftools.BeanstalkClient.BeanstalkException;
 import com.surftools.BeanstalkClient.Job;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
+import org.apache.camel.builder.NotifyBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.Test;
 
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
@@ -46,6 +50,10 @@ public class ConsumerCompletionTest extends BeanstalkMockTestSupport {
 
     @Test
     public void testDeleteOnComplete() throws Exception {
+        if (!canTest()) {
+            return;
+        }
+
         final long jobId = 111;
         final byte[] payload = Helper.stringToBytes(testMessage);
         final Job jobMock = mock(Job.class);
@@ -55,15 +63,21 @@ public class ConsumerCompletionTest extends BeanstalkMockTestSupport {
         when(client.reserve(anyInt()))
                 .thenReturn(jobMock)
                 .thenReturn(null);
+        when(client.statsJob(anyInt())).thenReturn(null);
 
         MockEndpoint result = getMockEndpoint("mock:result");
+
         result.expectedMinimumMessageCount(1);
         result.expectedBodiesReceived(testMessage);
         result.expectedHeaderReceived(Headers.JOB_ID, jobId);
         result.message(0).header(Headers.JOB_ID).isEqualTo(jobId);
-        result.assertIsSatisfied(2000);
+
+        context.startRoute("foo");
+
+        result.assertIsSatisfied();
 
         verify(client, atLeastOnce()).reserve(anyInt());
+        verify(client, atLeastOnce()).statsJob(anyInt());
         verify(client).delete(jobId);
     }
 
@@ -81,17 +95,29 @@ public class ConsumerCompletionTest extends BeanstalkMockTestSupport {
         when(client.reserve(anyInt()))
                 .thenReturn(jobMock)
                 .thenReturn(null);
+        when(client.statsJob(anyInt())).thenReturn(null);
+        when(client.release(anyInt(), anyLong(), anyInt())).thenReturn(true);
+
+        NotifyBuilder notify = new NotifyBuilder(context).whenFailed(1).create();
 
         MockEndpoint result = getMockEndpoint("mock:result");
-        result.expectedMinimumMessageCount(1);
-        result.assertIsNotSatisfied(1000);
+        result.expectedMessageCount(0);
+
+        context.startRoute("foo");
+
+        assertTrue(notify.matches(5, TimeUnit.SECONDS));
 
         verify(client, atLeastOnce()).reserve(anyInt());
+        verify(client, atLeastOnce()).statsJob(anyInt());
         verify(client).release(jobId, priority, delay);
     }
 
     @Test
     public void testBeanstalkException() throws Exception {
+        if (!canTest()) {
+            return;
+        }
+
         shouldIdie = false;
         final Job jobMock = mock(Job.class);
         final long jobId = 111;
@@ -102,13 +128,17 @@ public class ConsumerCompletionTest extends BeanstalkMockTestSupport {
         when(client.reserve(anyInt()))
                 .thenThrow(new BeanstalkException("test"))
                 .thenReturn(jobMock);
+        when(client.statsJob(anyInt())).thenReturn(null);
 
         MockEndpoint result = getMockEndpoint("mock:result");
         result.expectedMessageCount(1);
         result.expectedBodiesReceived(testMessage);
         result.expectedHeaderReceived(Headers.JOB_ID, jobId);
         result.message(0).header(Headers.JOB_ID).isEqualTo(jobId);
-        result.assertIsSatisfied(100);
+
+        context.startRoute("foo");
+
+        result.assertIsSatisfied();
 
         verify(client, atLeast(1)).reserve(anyInt());
         verify(client, times(1)).close();
@@ -119,7 +149,8 @@ public class ConsumerCompletionTest extends BeanstalkMockTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() {
-                from("beanstalk:tube?consumer.onFailure=release").process(processor).to("mock:result");
+                from("beanstalk:tube?consumer.onFailure=release").routeId("foo")
+                        .process(processor).to("mock:result");
             }
         };
     }

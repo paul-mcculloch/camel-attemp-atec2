@@ -27,15 +27,22 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
+import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriParam;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.ExchangeHelper;
 
 /**
- * Defines the <a href="http://aws.amazon.com/swf/">Amazon Simple Workflow Endpoint</a>
+ * The aws-swf component is used for managing workflows from Amazon Simple Workflow.
  */
+@UriEndpoint(firstVersion = "2.13.0", scheme = "aws-swf", title = "AWS Simple Workflow", syntax = "aws-swf:type",
+    consumerClass = SWFWorkflowConsumer.class, label = "cloud,workflow")
 public class SWFEndpoint extends DefaultEndpoint {
-    private SWFConfiguration configuration;
+
     private AmazonSimpleWorkflowClient amazonSWClient;
+
+    @UriParam
+    private SWFConfiguration configuration;
 
     public SWFEndpoint() {
     }
@@ -51,8 +58,10 @@ public class SWFEndpoint extends DefaultEndpoint {
     }
 
     public Consumer createConsumer(Processor processor) throws Exception {
-        return isWorkflow()
+        Consumer consumer = isWorkflow()
                 ? new SWFWorkflowConsumer(this, processor, configuration) : new SWFActivityConsumer(this, processor, configuration);
+        configureConsumer(consumer);
+        return consumer;
     }
 
     public boolean isSingleton() {
@@ -89,8 +98,8 @@ public class SWFEndpoint extends DefaultEndpoint {
         }
 
         AmazonSimpleWorkflowClient client = new AmazonSimpleWorkflowClient(credentials, clientConfiguration);
-        if (!configuration.getsWClientParameters().isEmpty()) {
-            setProperties(client, configuration.getsWClientParameters());
+        if (!configuration.getSWClientParameters().isEmpty()) {
+            setProperties(client, configuration.getSWClientParameters());
         }
         return client;
     }

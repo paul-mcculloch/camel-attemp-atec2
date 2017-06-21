@@ -24,10 +24,8 @@ import javax.jms.Session;
 import org.apache.camel.AsyncProcessor;
 import org.apache.camel.Exchange;
 import org.apache.camel.RuntimeCamelException;
+import org.apache.camel.component.sjms.SjmsConstants;
 import org.apache.camel.component.sjms.SjmsEndpoint;
-import org.apache.camel.component.sjms.SjmsExchangeMessageHelper;
-import org.apache.camel.component.sjms.TransactionCommitStrategy;
-import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.spi.Synchronization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,10 +45,10 @@ public abstract class AbstractMessageHandler implements MessageListener {
     private AsyncProcessor processor;
     private Session session;
     private boolean transacted;
+    private boolean sharedJMSSession;
     private boolean synchronous = true;
     private Synchronization synchronization;
     private boolean topic;
-    private TransactionCommitStrategy commitStrategy;
 
     public AbstractMessageHandler(SjmsEndpoint endpoint, ExecutorService executor) {
         this.endpoint = endpoint;
@@ -72,19 +70,27 @@ public abstract class AbstractMessageHandler implements MessageListener {
     public void onMessage(Message message) {
         RuntimeCamelException rce = null;
         try {
-            final DefaultExchange exchange = (DefaultExchange) SjmsExchangeMessageHelper.createExchange(message, getEndpoint());
+            final Exchange exchange = getEndpoint().createExchange(message, getSession());
 
             log.debug("Processing Exchange.id:{}", exchange.getExchangeId());
 
-            if (isTransacted() && synchronization != null) {
-                exchange.addOnCompletion(synchronization);
+            if (isTransacted()) {
+                if (isSharedJMSSession()) {
+                    // Propagate a JMS Session as an initiator if sharedJMSSession is enabled
+                    exchange.getIn().setHeader(SjmsConstants.JMS_SESSION, getSession());
+                }
             }
             try {
                 if (isTransacted() || isSynchronous()) {
-                    log.debug("  Handling synchronous message: {}", exchange.getIn().getBody());
+                    log.debug("Handling synchronous message: {}", exchange.getIn().getBody());
                     handleMessage(exchange);
+                    if (exchange.isFailed()) {
+                        synchronization.onFailure(exchange);
+                    } else {
+                        synchronization.onComplete(exchange);
+                    }
                 } else {
-                    log.debug("  Handling asynchronous message: {}", exchange.getIn().getBody());
+                    log.debug("Handling asynchronous message: {}", exchange.getIn().getBody());
                     executor.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -92,19 +98,15 @@ public abstract class AbstractMessageHandler implements MessageListener {
                                 handleMessage(exchange);
                             } catch (Exception e) {
                                 exchange.setException(e);
-//                                ObjectHelper.wrapRuntimeCamelException(e);
                             }
-
                         }
                     });
                 }
             } catch (Exception e) {
-                if (exchange != null) {
-                    if (exchange.getException() == null) {
-                        exchange.setException(e);
-                    } else {
-                        throw e;
-                    }
+                if (exchange.getException() == null) {
+                    exchange.setException(e);
+                } else {
+                    throw e;
                 }
             }
         } catch (Exception e) {
@@ -116,10 +118,7 @@ public abstract class AbstractMessageHandler implements MessageListener {
         }
     }
 
-    /**
-     * @param exchange
-     */
-    public abstract void handleMessage(final Exchange exchange);
+    public abstract void handleMessage(Exchange exchange);
 
     /**
      * Method will be called to
@@ -132,6 +131,14 @@ public abstract class AbstractMessageHandler implements MessageListener {
 
     public boolean isTransacted() {
         return transacted;
+    }
+
+    public void setSharedJMSSession(boolean share) {
+        this.sharedJMSSession = share;
+    }
+
+    public boolean isSharedJMSSession() {
+        return sharedJMSSession;
     }
 
     public SjmsEndpoint getEndpoint() {
@@ -170,7 +177,4 @@ public abstract class AbstractMessageHandler implements MessageListener {
         return topic;
     }
 
-    public TransactionCommitStrategy getCommitStrategy() {
-        return commitStrategy;
-    }
 }

@@ -32,16 +32,16 @@ public class InfoCmdHeaderTest extends BaseDockerHeaderTest<InfoCmd> {
 
     @Mock
     private InfoCmd mockObject;
-    
+
     @Test
-    public void listImageHeaderTest() {
-                
+    public void infoHeaderTest() {
+
         Map<String, Object> headers = getDefaultParameters();
-        
+
         template.sendBodyAndHeaders("direct:in", "", headers);
-        
+
         Mockito.verify(dockerClient, Mockito.times(1)).infoCmd();
-        
+
     }
 
     @Override

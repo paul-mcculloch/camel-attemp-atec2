@@ -246,6 +246,11 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
 
             final Node node = getMessageBodyNode(out);
 
+            if (getConfiguration().getKeyAccessor() == null) {
+                throw new XmlSignatureNoKeyException(
+                    "Key accessor is missing for XML signature generation. Specify a key accessor in the configuration.");
+            }
+            
             final KeySelector keySelector = getConfiguration().getKeyAccessor().getKeySelector(out);
             if (keySelector == null) {
                 throw new XmlSignatureNoKeyException(
@@ -276,23 +281,30 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
                 // parent only relevant for enveloped or detached signature
                 Node parent = getParentOfSignature(out, node, contentReferenceUri, signatureType);
 
-                XmlSignatureProperties.Input input = new InputBuilder().contentDigestAlgorithm(getDigestAlgorithmUri()).keyInfo(keyInfo)
-                        .message(out).messageBodyNode(node).parent(parent).signatureAlgorithm(getConfiguration().getSignatureAlgorithm())
-                        .signatureFactory(fac).signatureId(signatureId).contentReferenceUri(contentReferenceUri)
-                        .signatureType(signatureType).build();
-
-                XmlSignatureProperties.Output properties = getSignatureProperties(input);
-
-                List<? extends XMLObject> objects = getObjects(input, properties);
-                List<? extends Reference> refs = getReferences(input, properties, getKeyInfoId(keyInfo));
-
-                SignedInfo si = createSignedInfo(fac, refs);
-
                 if (parent == null) {
                     // for enveloping signature, create new document 
                     parent = XmlSignatureHelper.newDocumentBuilder(Boolean.TRUE).newDocument();
                 }
                 lastParent = parent;
+
+                XmlSignatureProperties.Input input = new InputBuilder().contentDigestAlgorithm(getDigestAlgorithmUri()).keyInfo(keyInfo)
+                        .message(out).messageBodyNode(node).parent(parent).signatureAlgorithm(getConfiguration().getSignatureAlgorithm())
+                        .signatureFactory(fac).signatureId(signatureId).contentReferenceUri(contentReferenceUri)
+                        .signatureType(signatureType)
+                        .prefixForXmlSignatureNamespace(getConfiguration().getPrefixForXmlSignatureNamespace()).build();
+
+                XmlSignatureProperties.Output properties = getSignatureProperties(input);
+
+                
+                // the signature properties can overwrite the signature Id
+                if (properties != null && properties.getSignatureId() != null && !properties.getSignatureId().isEmpty()) {
+                    signatureId = properties.getSignatureId();
+                }
+
+                List<? extends XMLObject> objects = getObjects(input, properties);
+                List<? extends Reference> refs = getReferences(input, properties, getKeyInfoId(keyInfo));
+
+                SignedInfo si = createSignedInfo(fac, refs);
 
                 DOMSignContext dsc = createAndConfigureSignContext(parent, keySelector);
 
@@ -554,9 +566,10 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
     protected List<? extends Reference> getReferences(XmlSignatureProperties.Input input, XmlSignatureProperties.Output properties,
             String keyInfoId) throws Exception { //NOPMD
 
+        String referenceId = properties == null ? null : properties.getContentReferenceId();
         // Create Reference with URI="#<objectId>" for enveloping signature, URI="" for enveloped signature, and URI = <value from configuration> for detached signature and the transforms
         Reference ref = createReference(input.getSignatureFactory(), input.getContentReferenceUri(),
-                getContentReferenceType(input.getMessage()), input.getSignatureType());
+                getContentReferenceType(input.getMessage()), input.getSignatureType(), referenceId, input.getMessage());
         Reference keyInfoRef = createKeyInfoReference(input.getSignatureFactory(), keyInfoId, input.getContentDigestAlgorithm());
 
         int propsRefsSize = properties == null || properties.getReferences() == null || properties.getReferences().isEmpty() ? 0
@@ -633,11 +646,11 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
         }
     }
 
-    protected Reference createReference(XMLSignatureFactory fac, String uri, String type, SignatureType sigType)
+    protected Reference createReference(XMLSignatureFactory fac, String uri, String type, SignatureType sigType, String id, Message message)
         throws InvalidAlgorithmParameterException, XmlSignatureException {
         try {
-            List<Transform> transforms = getTransforms(fac, sigType);
-            Reference ref = fac.newReference(uri, fac.newDigestMethod(getDigestAlgorithmUri(), null), transforms, type, null);
+            List<Transform> transforms = getTransforms(fac, sigType, message);
+            Reference ref = fac.newReference(uri, fac.newDigestMethod(getDigestAlgorithmUri(), null), transforms, type, id);
             return ref;
         } catch (NoSuchAlgorithmException e) {
             throw new XmlSignatureException("Wrong algorithm specified in the configuration.", e);
@@ -753,32 +766,46 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
         return fac.newXMLObject(Collections.singletonList(new DOMStructure(node)), id, null, null);
     }
 
-    private List<Transform> getTransforms(XMLSignatureFactory fac, SignatureType sigType) throws NoSuchAlgorithmException,
+    private List<Transform> getTransforms(XMLSignatureFactory fac, SignatureType sigType, Message message) throws NoSuchAlgorithmException,
             InvalidAlgorithmParameterException {
-        List<AlgorithmMethod> configuredTrafos = getConfiguration().getTransformMethods();
-        if (SignatureType.enveloped == sigType) {
-            // add enveloped transform if necessary
-            if (configuredTrafos.size() > 0) {
-                if (!containsEnvelopedTransform(configuredTrafos)) {
-                    configuredTrafos = new ArrayList<AlgorithmMethod>(configuredTrafos.size() + 1);
+        String transformMethodsHeaderValue = message.getHeader(XmlSignatureConstants.HEADER_TRANSFORM_METHODS, String.class);
+        if (transformMethodsHeaderValue == null) {
+            List<AlgorithmMethod> configuredTrafos = getConfiguration().getTransformMethods();
+            if (SignatureType.enveloped == sigType) {
+                // add enveloped transform if necessary
+                if (configuredTrafos.size() > 0) {
+                    if (!containsEnvelopedTransform(configuredTrafos)) {
+                        configuredTrafos = new ArrayList<AlgorithmMethod>(configuredTrafos.size() + 1);
+                        configuredTrafos.add(XmlSignatureHelper.getEnvelopedTransform());
+                        configuredTrafos.addAll(getConfiguration().getTransformMethods());
+                    }
+                } else {
+                    // add enveloped and C14N trafo
+                    configuredTrafos = new ArrayList<AlgorithmMethod>(2);
                     configuredTrafos.add(XmlSignatureHelper.getEnvelopedTransform());
-                    configuredTrafos.addAll(getConfiguration().getTransformMethods());
+                    configuredTrafos.add(XmlSignatureHelper.getCanonicalizationMethod(CanonicalizationMethod.INCLUSIVE));
                 }
-            } else {
-                // add enveloped and C14N trafo
-                configuredTrafos = new ArrayList<AlgorithmMethod>(2);
-                configuredTrafos.add(XmlSignatureHelper.getEnvelopedTransform());
-                configuredTrafos.add(XmlSignatureHelper.getCanonicalizationMethod(CanonicalizationMethod.INCLUSIVE));
             }
-        }
 
-        List<Transform> transforms = new ArrayList<Transform>(configuredTrafos.size());
-        for (AlgorithmMethod trafo : configuredTrafos) {
-            Transform transform = fac.newTransform(trafo.getAlgorithm(), (TransformParameterSpec) trafo.getParameterSpec());
-            transforms.add(transform);
-            LOG.debug("Transform method: {}", trafo.getAlgorithm());
+            List<Transform> transforms = new ArrayList<Transform>(configuredTrafos.size());
+            for (AlgorithmMethod trafo : configuredTrafos) {
+                Transform transform = fac.newTransform(trafo.getAlgorithm(), (TransformParameterSpec) trafo.getParameterSpec());
+                transforms.add(transform);
+                LOG.debug("Transform method: {}", trafo.getAlgorithm());
+            }
+            return transforms;
+        } else {
+            LOG.debug("Header {} with value '{}' found", XmlSignatureConstants.HEADER_TRANSFORM_METHODS, transformMethodsHeaderValue);
+            String[] transformAlgorithms = transformMethodsHeaderValue.split(",");
+            List<Transform> transforms = new ArrayList<Transform>(transformAlgorithms.length);
+            for (String transformAlgorithm : transformAlgorithms) {
+                transformAlgorithm = transformAlgorithm.trim();
+                Transform transform = fac.newTransform(transformAlgorithm, (TransformParameterSpec) null);
+                transforms.add(transform);
+                LOG.debug("Transform method: {}", transformAlgorithm);
+            }
+            return transforms;
         }
-        return transforms;
     }
 
     private boolean containsEnvelopedTransform(List<AlgorithmMethod> configuredTrafos) {
@@ -875,6 +902,8 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
 
         private SignatureType signatureType;
 
+        private String prefixForXmlSignatureNamespace;
+
         public InputBuilder signatureFactory(XMLSignatureFactory signatureFactory) {
             this.signatureFactory = signatureFactory;
             return this;
@@ -922,6 +951,11 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
 
         public InputBuilder signatureType(SignatureType signatureType) {
             this.signatureType = signatureType;
+            return this;
+        }
+
+        public InputBuilder prefixForXmlSignatureNamespace(String prefixForXmlSignatureNamespace) {
+            this.prefixForXmlSignatureNamespace = prefixForXmlSignatureNamespace;
             return this;
         }
 
@@ -976,6 +1010,11 @@ public class XmlSignerProcessor extends XmlSignatureProcessor {
                 @Override
                 public SignatureType getSignatureType() {
                     return signatureType;
+                }
+
+                @Override
+                public String getPrefixForXmlSignatureNamespace() {
+                    return prefixForXmlSignatureNamespace;
                 }
 
             };

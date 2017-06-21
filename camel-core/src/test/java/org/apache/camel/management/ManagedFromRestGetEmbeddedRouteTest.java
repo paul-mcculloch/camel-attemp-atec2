@@ -52,10 +52,10 @@ public class ManagedFromRestGetEmbeddedRouteTest extends ManagementTestSupport {
         assertTrue(xml.contains("<rest path=\"/say/hello\">"));
         assertTrue(xml.contains("<rest path=\"/say/bye\">"));
         assertTrue(xml.contains("</rest>"));
-        assertTrue(xml.contains("<get>"));
+        assertTrue(xml.contains("<get"));
         assertTrue(xml.contains("<route"));
         assertTrue(xml.contains("<transform"));
-        assertTrue(xml.contains("<post>"));
+        assertTrue(xml.contains("<post"));
         assertTrue(xml.contains("application/json"));
         assertTrue(xml.contains("</rests>"));
 
@@ -73,6 +73,7 @@ public class ManagedFromRestGetEmbeddedRouteTest extends ManagementTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
+                restConfiguration().host("localhost");
                 rest("/say/hello")
                     .get()
                         .route()

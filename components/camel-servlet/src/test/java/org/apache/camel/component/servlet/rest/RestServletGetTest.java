@@ -23,7 +23,6 @@ import com.meterware.servletunit.ServletUnitClient;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.http.HttpBinding;
 import org.apache.camel.component.servlet.ServletCamelRouterTestSupport;
 import org.apache.camel.component.servlet.ServletRestHttpBinding;
 import org.apache.camel.impl.JndiRegistry;
@@ -56,7 +55,7 @@ public class RestServletGetTest extends ServletCamelRouterTestSupport {
             @Override
             public void configure() throws Exception {
                 // configure to use servlet on localhost
-                restConfiguration().component("servlet").host("localhost").endpointProperty("httpBindingRef", "#myBinding");
+                restConfiguration().component("servlet").host("localhost").endpointProperty("httpBinding", "#myBinding");
                 
                 // use the rest DSL to define the rest services
                 rest("/users/")

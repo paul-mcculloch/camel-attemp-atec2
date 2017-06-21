@@ -18,12 +18,20 @@ package org.apache.camel.component.syslog;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Date;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.DataFormatName;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ExchangeHelper;
 
-public class SyslogDataFormat implements DataFormat {
+public class SyslogDataFormat extends ServiceSupport implements DataFormat, DataFormatName {
+
+    @Override
+    public String getDataFormatName() {
+        return "syslog";
+    }
 
     @Override
     public void marshal(Exchange exchange, Object body, OutputStream stream) throws Exception {
@@ -39,7 +47,11 @@ public class SyslogDataFormat implements DataFormat {
         exchange.getOut().setHeader(SyslogConstants.SYSLOG_FACILITY, message.getFacility());
         exchange.getOut().setHeader(SyslogConstants.SYSLOG_SEVERITY, message.getSeverity());
         exchange.getOut().setHeader(SyslogConstants.SYSLOG_HOSTNAME, message.getHostname());
-        exchange.getOut().setHeader(SyslogConstants.SYSLOG_TIMESTAMP, message.getTimestamp());
+        // use java.util.Date as timestamp
+        Date time = message.getTimestamp() != null ? message.getTimestamp().getTime() : null;
+        if (time != null) {
+            exchange.getOut().setHeader(SyslogConstants.SYSLOG_TIMESTAMP, time);
+        }
 
         // Since we are behind the fact of being in an Endpoint...
         // We need to pull in the remote/local via either Mina or Netty.
@@ -65,5 +77,15 @@ public class SyslogDataFormat implements DataFormat {
         }
 
         return message;
+    }
+
+    @Override
+    protected void doStart() throws Exception {
+        // noop
+    }
+
+    @Override
+    protected void doStop() throws Exception {
+        // noop
     }
 }

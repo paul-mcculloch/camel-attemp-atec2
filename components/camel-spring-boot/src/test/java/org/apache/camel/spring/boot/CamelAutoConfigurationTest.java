@@ -18,31 +18,40 @@ package org.apache.camel.spring.boot;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.ConsumerTemplate;
+import org.apache.camel.EndpointInject;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.Route;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.test.IntegrationTest;
-import org.springframework.boot.test.SpringApplicationConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.junit4.SpringRunner;
 
-import static org.apache.camel.spring.boot.TestConfig.ROUTE_ID;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-@RunWith(SpringJUnit4ClassRunner.class)
+@DirtiesContext
+@RunWith(SpringRunner.class)
 @EnableAutoConfiguration
-@SpringApplicationConfiguration(classes = {TestConfig.class, CamelAutoConfigurationTest.class, RouteConfigWithCamelContextInjected.class})
-@IntegrationTest({
-        "camel.springboot.consumerTemplateCacheSize:100",
-        "camel.springboot.jmxEnabled=false"})
+@SpringBootTest(
+    classes = {
+        CamelAutoConfigurationTest.TestConfig.class,
+        CamelAutoConfigurationTest.class,
+        RouteConfigWithCamelContextInjected.class },
+    properties = {
+        "camel.springboot.consumerTemplateCacheSize=100",
+        "camel.springboot.jmxEnabled=true",
+        "camel.springboot.name=customName",
+        "camel.springboot.typeConversion=true"}
+)
 public class CamelAutoConfigurationTest extends Assert {
 
     // Collaborators fixtures
@@ -64,7 +73,8 @@ public class CamelAutoConfigurationTest extends Assert {
 
     // Spring context fixtures
 
-
+    @EndpointInject(uri = "mock:xmlAutoLoading")
+    MockEndpoint xmlAutoLoadingMock;
 
     // Tests
 
@@ -76,7 +86,7 @@ public class CamelAutoConfigurationTest extends Assert {
     @Test
     public void shouldDetectRoutes() {
         // When
-        Route route = camelContext.getRoute(ROUTE_ID);
+        Route route = camelContext.getRoute(TestConfig.ROUTE_ID);
 
         // Then
         assertNotNull(route);
@@ -129,6 +139,12 @@ public class CamelAutoConfigurationTest extends Assert {
     }
 
     @Test
+    public void shouldChangeContextNameViaConfigurationCallback() {
+        assertEquals("customName", camelContext.getName());
+        assertEquals(camelContext.getName(), camelContext.getManagementName());
+    }
+
+    @Test
     public void shouldStartRoute() {
         // Given
         String message = "msg";
@@ -141,27 +157,38 @@ public class CamelAutoConfigurationTest extends Assert {
         assertEquals(message, receivedMessage);
     }
 
-}
+    @Test
+    public void shouldLoadXmlRoutes() throws InterruptedException {
+        // Given
+        String message = "msg";
+        xmlAutoLoadingMock.expectedBodiesReceived(message);
 
-@Configuration
-class TestConfig {
+        // When
+        producerTemplate.sendBody("direct:xmlAutoLoading", message);
 
-    static final String ROUTE_ID = "testRoute";
-
-    @Bean
-    RouteBuilder routeBuilder() {
-        return new RouteBuilder() {
-            @Override
-            public void configure() throws Exception {
-                from("direct:test").routeId(ROUTE_ID).to("mock:test");
-            }
-        };
+        // Then
+        xmlAutoLoadingMock.assertIsSatisfied();
     }
 
+    @Configuration
+    public static class TestConfig {
+        // Constants
+        static final String ROUTE_ID = "testRoute";
 
-    @Bean
-    CamelContextConfiguration camelContextConfiguration() {
-        return mock(CamelContextConfiguration.class);
+        // Test bean
+        @Bean
+        RouteBuilder routeBuilder() {
+            return new RouteBuilder() {
+                @Override
+                public void configure() throws Exception {
+                    from("direct:test").routeId(ROUTE_ID).to("mock:test");
+                }
+            };
+        }
+
+        @Bean
+        CamelContextConfiguration camelContextConfiguration() {
+            return mock(CamelContextConfiguration.class);
+        }
     }
-
 }

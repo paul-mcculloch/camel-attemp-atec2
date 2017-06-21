@@ -23,6 +23,7 @@ import org.apache.camel.Expression;
 import org.apache.camel.builder.xml.Namespaces;
 import org.apache.camel.model.language.ConstantExpression;
 import org.apache.camel.model.language.ELExpression;
+import org.apache.camel.model.language.ExchangePropertyExpression;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.model.language.GroovyExpression;
 import org.apache.camel.model.language.HeaderExpression;
@@ -34,15 +35,14 @@ import org.apache.camel.model.language.MethodCallExpression;
 import org.apache.camel.model.language.MvelExpression;
 import org.apache.camel.model.language.OgnlExpression;
 import org.apache.camel.model.language.PhpExpression;
-import org.apache.camel.model.language.PropertyExpression;
 import org.apache.camel.model.language.PythonExpression;
 import org.apache.camel.model.language.RefExpression;
 import org.apache.camel.model.language.RubyExpression;
 import org.apache.camel.model.language.SimpleExpression;
 import org.apache.camel.model.language.SpELExpression;
 import org.apache.camel.model.language.SqlExpression;
+import org.apache.camel.model.language.TerserExpression;
 import org.apache.camel.model.language.TokenizerExpression;
-import org.apache.camel.model.language.VtdXmlExpression;
 import org.apache.camel.model.language.XMLTokenizerExpression;
 import org.apache.camel.model.language.XPathExpression;
 import org.apache.camel.model.language.XQueryExpression;
@@ -114,7 +114,8 @@ public class ExpressionClauseSupport<T> {
      * An expression of an inbound message body
      */
     public T body() {
-        return expression(ExpressionBuilder.bodyExpression());
+        // reuse simple as this allows the model to represent this as a known JAXB type
+        return expression(new SimpleExpression("body"));
     }
 
     /**
@@ -170,7 +171,7 @@ public class ExpressionClauseSupport<T> {
      * An expression of the inbound message attachments
      */
     public T attachments() {
-        return expression(ExpressionBuilder.attachmentValuesExpression());
+        return expression(ExpressionBuilder.attachmentObjectValuesExpression());
     }
 
     /**
@@ -182,16 +183,36 @@ public class ExpressionClauseSupport<T> {
 
     /**
      * An expression of an exchange property of the given name
+     *
+     * @deprecated use {@link #exchangeProperty(String)} instead
      */
+    @Deprecated
     public T property(String name) {
-        return expression(new PropertyExpression(name));
+        return expression(new ExchangePropertyExpression(name));
+    }
+
+    /**
+     * An expression of an exchange property of the given name
+     */
+    public T exchangeProperty(String name) {
+        return expression(new ExchangePropertyExpression(name));
+    }
+
+    /**
+     * An expression of the exchange properties
+     *
+     * @deprecated use {@link #exchangeProperties()} instead
+     */
+    @Deprecated
+    public T properties() {
+        return exchangeProperties();
     }
 
     /**
      * An expression of the exchange properties
      */
-    public T properties() {
-        return expression(ExpressionBuilder.propertiesExpression());
+    public T exchangeProperties() {
+        return expression(ExpressionBuilder.exchangePropertiesExpression());
     }
 
     // Languages
@@ -286,6 +307,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T el(String text) {
         return expression(new ELExpression(text));
     }
@@ -321,7 +343,37 @@ public class ExpressionClauseSupport<T> {
      * @return the builder to continue processing the DSL
      */
     public T jsonpath(String text) {
-        return expression(new JsonPathExpression(text));
+        return jsonpath(text, false);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        return expression(expression);
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, boolean allowSimple) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        return expression(expression);
     }
 
     /**
@@ -340,11 +392,48 @@ public class ExpressionClauseSupport<T> {
     }
 
     /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param resultType the return type expected by the expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, Class<?> resultType) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setResultType(resultType);
+        setExpressionType(expression);
+        return result;
+    }
+
+    /**
+     * Evaluates a <a href="http://camel.apache.org/jsonpath.html">Json Path
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @param suppressExceptions whether to suppress exceptions such as PathNotFoundException
+     * @param allowSimple whether to allow in inlined simple exceptions in the json path expression
+     * @param resultType the return type expected by the expression
+     * @return the builder to continue processing the DSL
+     */
+    public T jsonpath(String text, boolean suppressExceptions, boolean allowSimple, Class<?> resultType) {
+        JsonPathExpression expression = new JsonPathExpression(text);
+        expression.setSuppressExceptions(suppressExceptions);
+        expression.setAllowSimple(allowSimple);
+        expression.setResultType(resultType);
+        setExpressionType(expression);
+        return result;
+    }
+
+    /**
      * Evaluates a <a href="http://commons.apache.org/jxpath/">JXPath expression</a>
      *
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T jxpath(String text) {
         return jxpath(text, false);
     }
@@ -356,6 +445,7 @@ public class ExpressionClauseSupport<T> {
      * @param lenient to configure whether lenient is in use or not
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T jxpath(String text, boolean lenient) {
         JXPathExpression answer = new JXPathExpression(text);
         answer.setLenient(lenient);
@@ -391,6 +481,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T php(String text) {
         return expression(new PhpExpression(text));
     }
@@ -402,6 +493,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T python(String text) {
         return expression(new PythonExpression(text));
     }
@@ -424,6 +516,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T ruby(String text) {
         return expression(new RubyExpression(text));
     }
@@ -446,6 +539,7 @@ public class ExpressionClauseSupport<T> {
      * @param text the expression to be evaluated
      * @return the builder to continue processing the DSL
      */
+    @Deprecated
     public T sql(String text) {
         return expression(new SqlExpression(text));
     }
@@ -477,6 +571,17 @@ public class ExpressionClauseSupport<T> {
     }
 
     /**
+     * Evaluates an <a href="http://camel.apache.org/hl7.html">HL7 Terser
+     * expression</a>
+     *
+     * @param text the expression to be evaluated
+     * @return the builder to continue processing the DSL
+     */
+    public T terser(String text) {
+        return expression(new TerserExpression(text));
+    }
+
+    /**
      * Evaluates a token expression on the message body
      *
      * @param token the token
@@ -495,6 +600,18 @@ public class ExpressionClauseSupport<T> {
      */
     public T tokenize(String token, int group) {
         return tokenize(token, null, false, group);
+    }
+
+    /**
+     * Evaluates a token expression on the message body
+     *
+     * @param token the token
+     * @param group to group by the given number
+     * @param skipFirst whether to skip the very first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, int group, boolean skipFirst) {
+        return tokenize(token, null, false, group, skipFirst);
     }
 
     /**
@@ -558,11 +675,59 @@ public class ExpressionClauseSupport<T> {
      * @return the builder to continue processing the DSL
      */
     public T tokenize(String token, String headerName, boolean regex, int group) {
+        return tokenize(token, headerName, regex, group, false);
+    }
+
+    /**
+     * Evaluates a token expression on the given header
+     *
+     * @param token the token
+     * @param headerName name of header to tokenize
+     * @param regex whether the token is a regular expression or not
+     * @param skipFirst whether to skip the very first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, String headerName, boolean regex, boolean skipFirst) {
+        TokenizerExpression expression = new TokenizerExpression();
+        expression.setToken(token);
+        expression.setHeaderName(headerName);
+        expression.setRegex(regex);
+        expression.setSkipFirst(skipFirst);
+        setExpressionType(expression);
+        return result;
+    }
+
+    /**
+     * Evaluates a token expression on the given header
+     *
+     * @param token the token
+     * @param headerName name of header to tokenize
+     * @param regex whether the token is a regular expression or not
+     * @param group to group by number of parts
+     * @param skipFirst whether to skip the very first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, String headerName, boolean regex, int group, boolean skipFirst) {
+        return tokenize(token, headerName, regex, "" + group, skipFirst);
+    }
+
+    /**
+     * Evaluates a token expression on the given header
+     *
+     * @param token the token
+     * @param headerName name of header to tokenize
+     * @param regex whether the token is a regular expression or not
+     * @param group to group by number of parts
+     * @param skipFirst whether to skip the very first element
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenize(String token, String headerName, boolean regex, String group, boolean skipFirst) {
         TokenizerExpression expression = new TokenizerExpression();
         expression.setToken(token);
         expression.setHeaderName(headerName);
         expression.setRegex(regex);
         expression.setGroup(group);
+        expression.setSkipFirst(skipFirst);
         setExpressionType(expression);
         return result;
     }
@@ -593,13 +758,23 @@ public class ExpressionClauseSupport<T> {
      * @return the builder to continue processing the DSL
      */
     public T tokenizeXMLPair(String tagName, String inheritNamespaceTagName, int group) {
+        return tokenizeXMLPair(tagName, inheritNamespaceTagName, "" + group);
+    }
+
+    /**
+     * Evaluates a token pair expression on the message body with XML content
+     *
+     * @param tagName the the tag name of the child nodes to tokenize
+     * @param inheritNamespaceTagName  optional parent or root tag name that contains namespace(s) to inherit
+     * @param group to group by the given number
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizeXMLPair(String tagName, String inheritNamespaceTagName, String group) {
         TokenizerExpression expression = new TokenizerExpression();
         expression.setToken(tagName);
         expression.setInheritNamespaceTagName(inheritNamespaceTagName);
         expression.setXml(true);
-        if (group > 0) {
-            expression.setGroup(group);
-        }
+        expression.setGroup(group);
         setExpressionType(expression);
         return result;
     }
@@ -622,46 +797,6 @@ public class ExpressionClauseSupport<T> {
         if (group > 0) {
             expression.setGroup(group);
         }
-        setExpressionType(expression);
-        return result;
-    }
-
-    /**
-     * Evaluates an <a href="http://camel.apache.org/vtdxml.html">XPath
-     * expression using the VTD-XML library</a>
-     *
-     * @param text the expression to be evaluated
-     * @return the builder to continue processing the DSL
-     */
-    public T vtdxml(String text) {
-        return expression(new VtdXmlExpression(text));
-    }
-
-    /**
-     * Evaluates an <a href="http://camel.apache.org/vtdxml.html">XPath
-     * expression using the VTD-XML library</a>
-     * with the specified set of namespace prefixes and URIs
-     *
-     * @param text the expression to be evaluated
-     * @param namespaces the namespace prefix and URIs to use
-     * @return the builder to continue processing the DSL
-     */
-    public T vtdxml(String text, Namespaces namespaces) {
-        return vtdxml(text, namespaces.getNamespaces());
-    }
-
-    /**
-     * Evaluates an <a href="http://camel.apache.org/vtdxml.html">XPath
-     * expression using the VTD-XML library</a>
-     * with the specified set of namespace prefixes and URIs
-     *
-     * @param text the expression to be evaluated
-     * @param namespaces the namespace prefix and URIs to use
-     * @return the builder to continue processing the DSL
-     */
-    public T vtdxml(String text, Map<String, String> namespaces) {
-        VtdXmlExpression expression = new VtdXmlExpression(text);
-        expression.setNamespaces(namespaces);
         setExpressionType(expression);
         return result;
     }

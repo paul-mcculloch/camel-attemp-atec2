@@ -19,7 +19,7 @@ package org.apache.camel.itest.http;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.http.HttpMessage;
+import org.apache.camel.http.common.HttpMessage;
 import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
@@ -32,7 +32,7 @@ public class Http4RouteTest extends CamelTestSupport {
     public void sendHttpGetRequestTest() {
         String response = template.requestBody("http4://localhost:" + port1 
                          + "/test?aa=bb&httpClient.socketTimeout=10000&httpClient.connectTimeout=10000"
-                         + "&bridgeEndpoint=true&throwExceptionOnFailure=false" , null, String.class);
+                         + "&bridgeEndpoint=true&throwExceptionOnFailure=false", null, String.class);
         assertEquals("Get a wrong response", "aa=bb", response);
         
         response = template.requestBodyAndHeader("direct:start1", null, Exchange.HTTP_QUERY, "aa=bb", String.class);

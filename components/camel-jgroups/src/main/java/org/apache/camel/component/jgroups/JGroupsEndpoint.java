@@ -24,46 +24,42 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
-import org.jgroups.Channel;
+import org.apache.camel.spi.UriPath;
 import org.jgroups.JChannel;
 import org.jgroups.Message;
 import org.jgroups.View;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@UriEndpoint(scheme = "jgroups", consumerClass = JGroupsConsumer.class)
+/**
+ * The jgroups component provides exchange of messages between Camel and JGroups clusters.
+ */
+@UriEndpoint(firstVersion = "2.13.0", scheme = "jgroups", title = "JGroups", syntax = "jgroups:clusterName", consumerClass = JGroupsConsumer.class, label = "clustering,messaging")
 public class JGroupsEndpoint extends DefaultEndpoint {
 
     public static final String HEADER_JGROUPS_ORIGINAL_MESSAGE = "JGROUPS_ORIGINAL_MESSAGE";
-
     public static final String HEADER_JGROUPS_SRC = "JGROUPS_SRC";
-
     public static final String HEADER_JGROUPS_DEST = "JGROUPS_DEST";
-
     public static final String HEADER_JGROUPS_CHANNEL_ADDRESS = "JGROUPS_CHANNEL_ADDRESS";
 
     private static final Logger LOG = LoggerFactory.getLogger(JGroupsEndpoint.class);
 
-    private Channel channel;
     private AtomicInteger connectCount = new AtomicInteger(0);
 
-    private Channel resolvedChannel;
+    private JChannel channel;
+    private JChannel resolvedChannel;
 
-    @UriParam
+    @UriPath @Metadata(required = "true")
     private String clusterName;
-
     @UriParam
     private String channelProperties;
+    @UriParam(label = "consumer")
+    private boolean enableViewMessages;
 
-    @UriParam
-    private Boolean enableViewMessages;
-
-    @UriParam
-    private boolean resolvedEnableViewMessages;
-
-    public JGroupsEndpoint(String endpointUri, Component component, Channel channel, String clusterName, String channelProperties, Boolean enableViewMessages) {
+    public JGroupsEndpoint(String endpointUri, Component component, JChannel channel, String clusterName, String channelProperties, boolean enableViewMessages) {
         super(endpointUri, component);
         this.channel = channel;
         this.clusterName = clusterName;
@@ -112,7 +108,6 @@ public class JGroupsEndpoint extends DefaultEndpoint {
     protected void doStart() throws Exception {
         super.doStart();
         resolvedChannel = resolveChannel();
-        resolvedEnableViewMessages = resolveEnableViewMessages();
     }
 
     @Override
@@ -122,7 +117,7 @@ public class JGroupsEndpoint extends DefaultEndpoint {
         super.doStop();
     }
 
-    private Channel resolveChannel() throws Exception {
+    private JChannel resolveChannel() throws Exception {
         if (channel != null) {
             return channel;
         }
@@ -152,18 +147,14 @@ public class JGroupsEndpoint extends DefaultEndpoint {
         }
     }
 
-    private boolean resolveEnableViewMessages() {
-        if (enableViewMessages != null) {
-            resolvedEnableViewMessages = enableViewMessages;
-        }
-        return resolvedEnableViewMessages;
-    }
-
-    public Channel getChannel() {
+    public JChannel getChannel() {
         return channel;
     }
 
-    public void setChannel(Channel channel) {
+    /**
+     * The channel to use
+     */
+    public void setChannel(JChannel channel) {
         this.channel = channel;
     }
 
@@ -171,6 +162,9 @@ public class JGroupsEndpoint extends DefaultEndpoint {
         return clusterName;
     }
 
+    /**
+     * The name of the JGroups cluster the component should connect to.
+     */
     public void setClusterName(String clusterName) {
         this.clusterName = clusterName;
     }
@@ -179,31 +173,27 @@ public class JGroupsEndpoint extends DefaultEndpoint {
         return channelProperties;
     }
 
+    /**
+     * Specifies configuration properties of the JChannel used by the endpoint.
+     */
     public void setChannelProperties(String channelProperties) {
         this.channelProperties = channelProperties;
     }
 
-    public Channel getResolvedChannel() {
+    JChannel getResolvedChannel() {
         return resolvedChannel;
     }
 
-    public void setResolvedChannel(Channel resolvedChannel) {
-        this.resolvedChannel = resolvedChannel;
-    }
-
-    public Boolean getEnableViewMessages() {
+    public boolean isEnableViewMessages() {
         return enableViewMessages;
     }
 
-    public void setEnableViewMessages(Boolean enableViewMessages) {
+    /**
+     * If set to true, the consumer endpoint will receive org.jgroups.View messages as well (not only org.jgroups.Message instances).
+     * By default only regular messages are consumed by the endpoint.
+     */
+    public void setEnableViewMessages(boolean enableViewMessages) {
         this.enableViewMessages = enableViewMessages;
     }
 
-    public boolean isResolvedEnableViewMessages() {
-        return resolvedEnableViewMessages;
-    }
-
-    public void setResolvedEnableViewMessages(boolean resolvedEnableViewMessages) {
-        this.resolvedEnableViewMessages = resolvedEnableViewMessages;
-    }
 }

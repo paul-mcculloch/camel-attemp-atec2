@@ -20,6 +20,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 
 import org.apache.camel.Exchange;
+import org.springframework.orm.jpa.SharedEntityManagerCreator;
 
 /**
  * Helper for JPA.
@@ -36,10 +37,11 @@ public final class JpaHelper {
      * @param entityManagerFactory     the entity manager factory (mandatory)
      * @param usePassedInEntityManager whether to use an existing {@link javax.persistence.EntityManager} which has been stored
      *                                 on the exchange in the header with key {@link org.apache.camel.component.jpa.JpaConstants#ENTITY_MANAGER}
+     * @param useSharedEntityManager   whether to use SharedEntityManagerCreator if not already passed in                             
      * @return the entity manager (is never null)
      */
     public static EntityManager getTargetEntityManager(Exchange exchange, EntityManagerFactory entityManagerFactory,
-                                                       boolean usePassedInEntityManager) {
+                                                       boolean usePassedInEntityManager, boolean useSharedEntityManager, boolean allowRecreate) {
         EntityManager em = null;
 
         // favor using entity manager provided as a header from the end user
@@ -52,7 +54,21 @@ public final class JpaHelper {
             em = exchange.getProperty(JpaConstants.ENTITY_MANAGER, EntityManager.class);
         }
 
+        if (em == null && useSharedEntityManager) {
+            em = SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory);
+        }
+        
         if (em == null) {
+            // create a new entity manager
+            em = entityManagerFactory.createEntityManager();
+            if (exchange != null) {
+                // we want to reuse the EM so store as property and make sure we close it when done with the exchange
+                exchange.setProperty(JpaConstants.ENTITY_MANAGER, em);
+                exchange.addOnCompletion(new JpaCloseEntityManagerOnCompletion(em));
+            }
+        }
+
+        if (allowRecreate && em == null || !em.isOpen()) {
             // create a new entity manager
             em = entityManagerFactory.createEntityManager();
             if (exchange != null) {

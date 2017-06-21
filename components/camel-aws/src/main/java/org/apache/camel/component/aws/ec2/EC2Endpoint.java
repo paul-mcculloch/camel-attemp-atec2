@@ -16,14 +16,23 @@
  */
 package org.apache.camel.component.aws.ec2;
 
+<<<<<<< HEAD
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.ec2.AmazonEC2Client;
+=======
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.ec2.AmazonEC2Client;
+
+>>>>>>> upstream/master
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.ScheduledPollEndpoint;
+<<<<<<< HEAD
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +47,23 @@ public class EC2Endpoint extends ScheduledPollEndpoint {
     private EC2Configuration configuration;
     private AmazonEC2Client amazonEC2Client;
 
+=======
+import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriParam;
+import org.apache.camel.util.ObjectHelper;
+
+/**
+ * The aws-ec2 is used for managing Amazon EC2 instances.
+ */
+@UriEndpoint(firstVersion = "2.16.0", scheme = "aws-ec2", title = "AWS EC2", syntax = "aws-ec2:label", producerOnly = true, label = "cloud,management")
+public class EC2Endpoint extends ScheduledPollEndpoint {
+    
+    private AmazonEC2Client ec2Client;
+
+    @UriParam
+    private EC2Configuration configuration;
+    
+>>>>>>> upstream/master
     public EC2Endpoint(String uri, Component component, EC2Configuration configuration) {
         super(uri, component);
         this.configuration = configuration;
@@ -59,17 +85,26 @@ public class EC2Endpoint extends ScheduledPollEndpoint {
     public void doStart() throws Exception {
         super.doStart();
         
+<<<<<<< HEAD
         amazonEC2Client = configuration.getAmazonEC2Client() != null ? configuration.getAmazonEC2Client() : createEC2Client();
         if (ObjectHelper.isNotEmpty(configuration.getAmazonEC2Endpoint())) {
             amazonEC2Client.setEndpoint(configuration.getAmazonEC2Endpoint());
         }
         
      }
+=======
+        ec2Client = configuration.getAmazonEc2Client() != null ? configuration.getAmazonEc2Client() : createEc2Client();
+        if (ObjectHelper.isNotEmpty(configuration.getAmazonEc2Endpoint())) {
+            ec2Client.setEndpoint(configuration.getAmazonEc2Endpoint());
+        }
+    }
+>>>>>>> upstream/master
 
     public EC2Configuration getConfiguration() {
         return configuration;
     }
 
+<<<<<<< HEAD
     public AmazonEC2Client getEC2Client() {
         return amazonEC2Client;
     }
@@ -77,6 +112,36 @@ public class EC2Endpoint extends ScheduledPollEndpoint {
     AmazonEC2Client createEC2Client() {
         AWSCredentials credentials = new BasicAWSCredentials(configuration.getAccessKey(), configuration.getSecretKey());
         AmazonEC2Client client = new AmazonEC2Client(credentials);
+=======
+    public AmazonEC2Client getEc2Client() {
+        return ec2Client;
+    }
+
+    AmazonEC2Client createEc2Client() {
+        AmazonEC2Client client = null;
+        ClientConfiguration clientConfiguration = null;
+        boolean isClientConfigFound = false;
+        if (ObjectHelper.isNotEmpty(configuration.getProxyHost()) && ObjectHelper.isNotEmpty(configuration.getProxyPort())) {
+            clientConfiguration = new ClientConfiguration();
+            clientConfiguration.setProxyHost(configuration.getProxyHost());
+            clientConfiguration.setProxyPort(configuration.getProxyPort());
+            isClientConfigFound = true;
+        }
+        if (configuration.getAccessKey() != null && configuration.getSecretKey() != null) {
+            AWSCredentials credentials = new BasicAWSCredentials(configuration.getAccessKey(), configuration.getSecretKey());
+            if (isClientConfigFound) {
+                client = new AmazonEC2Client(credentials, clientConfiguration);
+            } else {
+                client = new AmazonEC2Client(credentials);
+            }
+        } else {
+            if (isClientConfigFound) {
+                client = new AmazonEC2Client();
+            } else {
+                client = new AmazonEC2Client(clientConfiguration);
+            }
+        }
+>>>>>>> upstream/master
         return client;
     }
 }

@@ -23,14 +23,16 @@ import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.Metadata;
 
 /**
- * Represents the uniVocity TSV {@link org.apache.camel.spi.DataFormat}
+ * UniVocity TSV data format
  */
+@Metadata(firstVersion = "2.15.0", label = "dataformat,transformation,csv", title = "uniVocity TSV")
 @XmlRootElement(name = "univocity-tsv")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UniVocityTsvDataFormat extends UniVocityAbstractDataFormat {
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = "\\")
     protected String escapeChar;
 
     public UniVocityTsvDataFormat() {
@@ -41,6 +43,9 @@ public class UniVocityTsvDataFormat extends UniVocityAbstractDataFormat {
         return escapeChar;
     }
 
+    /**
+     * The escape character.
+     */
     public void setEscapeChar(String escapeChar) {
         this.escapeChar = escapeChar;
     }

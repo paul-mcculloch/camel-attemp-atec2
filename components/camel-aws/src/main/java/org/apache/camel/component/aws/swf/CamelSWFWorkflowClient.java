@@ -22,6 +22,8 @@ import java.util.Map;
 
 import com.amazonaws.services.simpleworkflow.flow.DynamicWorkflowClientExternal;
 import com.amazonaws.services.simpleworkflow.flow.DynamicWorkflowClientExternalImpl;
+import com.amazonaws.services.simpleworkflow.flow.StartWorkflowOptions;
+import com.amazonaws.services.simpleworkflow.flow.common.FlowHelpers;
 import com.amazonaws.services.simpleworkflow.flow.common.WorkflowExecutionUtils;
 import com.amazonaws.services.simpleworkflow.flow.worker.GenericWorkflowClientExternalImpl;
 import com.amazonaws.services.simpleworkflow.model.ChildPolicy;
@@ -46,7 +48,7 @@ public class CamelSWFWorkflowClient {
         dynamicWorkflowClientExternal.signalWorkflowExecution(signalName, toArray(arguments));
     }
 
-    public Object getWorkflowExecutionState(String workflowId, String runId, Class aClass) throws Throwable {
+    public Object getWorkflowExecutionState(String workflowId, String runId, Class<?> aClass) throws Throwable {
         DynamicWorkflowClientExternal dynamicWorkflowClientExternal = getDynamicWorkflowClient(workflowId, runId);
         return dynamicWorkflowClientExternal.getWorkflowExecutionState(aClass);
     }
@@ -62,13 +64,21 @@ public class CamelSWFWorkflowClient {
         dynamicWorkflowClientExternal.terminateWorkflowExecution(reason, details, policy);
     }
 
-    public String[] startWorkflowExecution(String workflowId, String runId, String eventName, String version, Object arguments) {
+    public String[] startWorkflowExecution(String workflowId, String runId, String eventName, String version, Object arguments, List<String> tags) {
         DynamicWorkflowClientExternalImpl dynamicWorkflowClientExternal = (DynamicWorkflowClientExternalImpl) getDynamicWorkflowClient(workflowId, runId);
 
         WorkflowType workflowType = new WorkflowType();
         workflowType.setName(eventName);
         workflowType.setVersion(version);
+        
         dynamicWorkflowClientExternal.setWorkflowType(workflowType);
+        
+        StartWorkflowOptions startWorkflowOptions = new StartWorkflowOptions();
+        startWorkflowOptions.setTaskStartToCloseTimeoutSeconds(FlowHelpers.durationToSeconds(configuration.getTaskStartToCloseTimeout()));
+        startWorkflowOptions.setExecutionStartToCloseTimeoutSeconds(FlowHelpers.durationToSeconds(configuration.getExecutionStartToCloseTimeout()));
+        startWorkflowOptions.setTagList(tags);
+        dynamicWorkflowClientExternal.setSchedulingOptions(startWorkflowOptions);
+        
         dynamicWorkflowClientExternal.startWorkflowExecution(toArray(arguments));
 
         String newWorkflowId = dynamicWorkflowClientExternal.getWorkflowExecution().getWorkflowId();
@@ -103,7 +113,7 @@ public class CamelSWFWorkflowClient {
         WorkflowExecution workflowExecution = new WorkflowExecution();
         workflowExecution.setWorkflowId(workflowId != null ? workflowId : genericClient.generateUniqueId());
         workflowExecution.setRunId(runId);
-        return new DynamicWorkflowClientExternalImpl(workflowExecution, null, endpoint.getStartWorkflowOptions(), null, genericClient);
+        return new DynamicWorkflowClientExternalImpl(workflowExecution, null, endpoint.getStartWorkflowOptions(), configuration.getDataConverter(), genericClient);
     }
 
     private Object[] toArray(Object input) {

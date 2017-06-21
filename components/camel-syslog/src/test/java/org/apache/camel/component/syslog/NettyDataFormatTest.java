@@ -69,6 +69,20 @@ public class NettyDataFormatTest extends CamelTestSupport {
 
         assertMockEndpointsSatisfied();
     }
+    
+    @Test
+    public void testSendingRawUDPFromNetty() throws IOException, InterruptedException {
+
+        MockEndpoint mock = getMockEndpoint("mock:syslogReceiver");
+        MockEndpoint mock2 = getMockEndpoint("mock:syslogReceiver2");
+        mock.expectedMessageCount(1);
+        mock2.expectedMessageCount(1);
+        mock2.expectedBodiesReceived(message);
+
+        template.sendBody("netty4:udp://127.0.0.1:" + serverPort + "?sync=false&allowDefaultCodec=false&useByteBuf=true", message);
+
+        assertMockEndpointsSatisfied();
+    }
 
     @Override
     protected RouteBuilder createRouteBuilder() throws Exception {
@@ -79,10 +93,11 @@ public class NettyDataFormatTest extends CamelTestSupport {
                 DataFormat syslogDataFormat = new SyslogDataFormat();
 
                 // we setup a Syslog  listener on a random port.
-                from("netty:udp://127.0.0.1:" + serverPort + "?sync=false&allowDefaultCodec=false").unmarshal(syslogDataFormat)
+                from("netty4:udp://127.0.0.1:" + serverPort + "?sync=false&allowDefaultCodec=false").unmarshal(syslogDataFormat)
                     .process(new Processor() {
                         public void process(Exchange ex) {
                             assertTrue(ex.getIn().getBody() instanceof SyslogMessage);
+                            SyslogMessage message = ex.getIn().getBody(SyslogMessage.class);
                         }
                     }).to("mock:syslogReceiver").
                     marshal(syslogDataFormat).to("mock:syslogReceiver2");

@@ -17,6 +17,7 @@
 package org.apache.camel.component.rabbitmq;
 
 import java.io.IOException;
+import java.util.concurrent.TimeoutException;
 
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -27,20 +28,27 @@ import com.rabbitmq.client.Envelope;
 
 import org.apache.camel.Produce;
 import org.apache.camel.ProducerTemplate;
-import org.apache.camel.test.spring.CamelSpringJUnit4ClassRunner;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
 import static org.junit.Assert.assertEquals;
+
 /**
  * Test RabbitMQ component with Spring DSL
  */
-@RunWith(CamelSpringJUnit4ClassRunner.class)
-@ContextConfiguration("RabbitMQSpringIntTest-context.xml")
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration
 public class RabbitMQSpringIntTest {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RabbitMQSpringIntTest.class);
+
     @Produce(uri = "direct:rabbitMQ")
     protected ProducerTemplate template;
     @Autowired
@@ -48,38 +56,47 @@ public class RabbitMQSpringIntTest {
     private Connection connection;
     private Channel channel;
 
-    private Connection openConnection() throws IOException {
-        if (connection == null) {
+    private boolean isConnectionOpened() {
+        return connection != null && connection.isOpen();
+    }
+
+    private Connection openConnection() throws IOException, TimeoutException {
+        if (!isConnectionOpened()) {
+            LOGGER.info("Open connection");
             connection = connectionFactory.newConnection();
         }
         return connection;
     }
 
-    private Channel openChannel() throws IOException {
-        if (channel == null) {
+    private boolean isChannelOpened() {
+        return channel != null && channel.isOpen();
+    }
+
+    private Channel openChannel() throws IOException, TimeoutException {
+        if (!isChannelOpened()) {
+            LOGGER.info("Open channel");
             channel = openConnection().createChannel();
         }
         return channel;
     }
 
     @Before
-    public void bindQueueExchange() throws IOException {
+    public void bindQueueExchange() throws IOException, TimeoutException {
         openChannel();
-        channel.exchangeDeclare("ex2", "direct", true, false, null);
-        channel.queueDeclare("q2", true, false, false, null);
-        channel.queueBind("q2", "ex2", "rk2");
     }
 
     @After
-    public void closeConnection() {
-        if (channel != null) {
+    public void closeConnection() throws TimeoutException {
+        if (isChannelOpened()) {
             try {
+                LOGGER.info("Close channel");
                 channel.close();
             } catch (IOException e) {
             }
         }
-        if (connection != null) {
+        if (isConnectionOpened()) {
             try {
+                LOGGER.info("Close connection");
                 connection.close();
             } catch (IOException e) {
             }
@@ -102,10 +119,13 @@ public class RabbitMQSpringIntTest {
         public byte[] getLastBody() {
             return lastBody;
         }
+        public String getLastBodyAsString() {
+            return lastBody == null ? null : new String(lastBody);
+        }
     }
 
     @Test
-    public void testSendCsutomConnectionFactory() throws Exception {
+    public void testSendCustomConnectionFactory() throws Exception {
         String body = "Hello Rabbit";
         template.sendBodyAndHeader(body, RabbitMQConstants.ROUTING_KEY, "rk2");
 
@@ -117,6 +137,6 @@ public class RabbitMQSpringIntTest {
             Thread.sleep(1000L);
             i--;
         }
-        assertEquals(body, new String(consumer.getLastBody()));
+        assertEquals(body, consumer.getLastBodyAsString());
     }
 }

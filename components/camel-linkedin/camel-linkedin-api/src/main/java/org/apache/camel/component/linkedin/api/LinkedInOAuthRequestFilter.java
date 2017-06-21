@@ -19,6 +19,7 @@ package org.apache.camel.component.linkedin.api;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.security.SecureRandom;
 import java.util.HashMap;
@@ -42,12 +43,15 @@ import com.gargoylesoftware.htmlunit.WebClient;
 import com.gargoylesoftware.htmlunit.WebClientOptions;
 import com.gargoylesoftware.htmlunit.WebRequest;
 import com.gargoylesoftware.htmlunit.WebResponse;
+import com.gargoylesoftware.htmlunit.html.HtmlDivision;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
 import com.gargoylesoftware.htmlunit.html.HtmlPasswordInput;
 import com.gargoylesoftware.htmlunit.html.HtmlSubmitInput;
 import com.gargoylesoftware.htmlunit.html.HtmlTextInput;
+import com.gargoylesoftware.htmlunit.util.WebConnectionWrapper;
 
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpStatus;
 import org.apache.http.conn.params.ConnRoutePNames;
@@ -89,7 +93,7 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
         this.oAuthToken = null;
 
         // create HtmlUnit client
-        webClient = new WebClient(BrowserVersion.FIREFOX_24);
+        webClient = new WebClient(BrowserVersion.FIREFOX_38);
         final WebClientOptions options = webClient.getOptions();
         options.setRedirectEnabled(true);
         options.setJavaScriptEnabled(false);
@@ -107,6 +111,15 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
             options.setProxyConfig(proxyConfig);
         }
 
+        // disable default gzip compression, as error pages are sent with no compression and htmlunit doesn't negotiate
+        new WebConnectionWrapper(webClient) {
+            @Override
+            public WebResponse getResponse(WebRequest request) throws IOException {
+                request.setAdditionalHeader(HttpHeaders.ACCEPT_ENCODING, "identity");
+                return super.getResponse(request);
+            }
+        };
+
         if (!lazyAuth) {
             try {
                 updateOAuthToken();
@@ -119,8 +132,8 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
 
     @SuppressWarnings("deprecation")
     private String getRefreshToken() {
-        // authorize application on user's behalf
-        webClient.getOptions().setRedirectEnabled(true);
+        // disable redirect to avoid loading error redirect URL
+        webClient.getOptions().setRedirectEnabled(false);
 
         try {
             final String csrfId = String.valueOf(new SecureRandom().nextLong());
@@ -145,7 +158,30 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
                 url = String.format(AUTHORIZATION_URL_WITH_SCOPE, oAuthParams.getClientId(), csrfId,
                     builder.toString(), encodedRedirectUri);
             }
-            final HtmlPage authPage = webClient.getPage(url);
+            HtmlPage authPage;
+            try {
+                authPage = webClient.getPage(url);
+            } catch (FailingHttpStatusCodeException e) {
+                // only handle errors returned with redirects
+                if (e.getStatusCode() == HttpStatus.SC_MOVED_TEMPORARILY) {
+                    final URL location = new URL(e.getResponse().getResponseHeaderValue(HttpHeaders.LOCATION));
+                    final String locationQuery = location.getQuery();
+                    if (locationQuery != null && locationQuery.contains("error=")) {
+                        throw new IOException(URLDecoder.decode(locationQuery).replaceAll("&", ", "));
+                    } else {
+                        // follow the redirect to login form
+                        authPage = webClient.getPage(location);
+                    }
+                } else {
+                    throw e;
+                }
+            }
+
+            // look for <div role="alert">
+            final HtmlDivision div = authPage.getFirstByXPath("//div[@role='alert']");
+            if (div != null) {
+                throw new IllegalArgumentException("Error authorizing application: " + div.getTextContent());
+            }
 
             // submit login credentials
             final HtmlForm loginForm = authPage.getFormByName("oauth2SAuthorizeForm");
@@ -154,9 +190,6 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
             final HtmlPasswordInput password = loginForm.getInputByName("session_password");
             password.setText(oAuthParams.getUserPassword());
             final HtmlSubmitInput submitInput = loginForm.getInputByName("authorize");
-
-            // disable redirect to avoid loading redirect URL
-            webClient.getOptions().setRedirectEnabled(false);
 
             // validate CSRF and get authorization code
             String redirectQuery;
@@ -169,7 +202,10 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
                     throw e;
                 }
                 final String location = e.getResponse().getResponseHeaderValue("Location");
-                redirectQuery = location.substring(location.indexOf('?') + 1);
+                redirectQuery = new URL(location).getQuery();
+            }
+            if (redirectQuery == null) {
+                throw new IllegalArgumentException("Redirect response query is null, check username, password and permissions");
             }
             final Map<String, String> params = new HashMap<String, String>();
             final Matcher matcher = QUERY_PARAM_PATTERN.matcher(redirectQuery);
@@ -191,7 +227,7 @@ public final class LinkedInOAuthRequestFilter implements ClientRequestFilter {
     }
 
     public void close() {
-        webClient.closeAllWindows();
+        webClient.close();
     }
 
     private OAuthToken getAccessToken(String refreshToken) throws IOException {

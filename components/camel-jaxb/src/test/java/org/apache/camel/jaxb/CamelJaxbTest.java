@@ -19,6 +19,7 @@ package org.apache.camel.jaxb;
 import javax.xml.bind.JAXBElement;
 
 import org.apache.camel.CamelExecutionException;
+import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.converter.jaxb.JaxbDataFormat;
@@ -48,6 +49,20 @@ public class CamelJaxbTest extends CamelTestSupport {
         String xml = "<Person><firstName>FOO</firstName><lastName>BAR\u0008</lastName></Person>";
         template.sendBody("direct:getJAXBElementValue", xml);
     }
+    
+    @Test
+    public void testFilterNonXmlChars() throws Exception {
+        String xmlUTF = "<Person><firstName>FOO</firstName><lastName>BAR \u20AC </lastName></Person>";
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + xmlUTF;
+        PersonType expected = new PersonType();
+        expected.setFirstName("FOO");
+        expected.setLastName("BAR \u20AC ");
+        MockEndpoint resultEndpoint = resolveMandatoryEndpoint("mock:result", MockEndpoint.class);
+        resultEndpoint.expectedBodiesReceived(expected);
+        template.sendBody("direct:unmarshalFilteringEnabled", xml);
+        resultEndpoint.assertIsSatisfied();
+       
+    }
 
     @Test
     public void testMarshalBadCharsWithFiltering() throws Exception {
@@ -72,6 +87,7 @@ public class CamelJaxbTest extends CamelTestSupport {
 
         MockEndpoint resultEndpoint = resolveMandatoryEndpoint("mock:result", MockEndpoint.class);
         resultEndpoint.expectedMessageCount(1);
+        resultEndpoint.expectedHeaderReceived(Exchange.CONTENT_TYPE, "application/xml");
         template.sendBody("direct:marshal", person);
         resultEndpoint.assertIsSatisfied();
 
@@ -88,6 +104,7 @@ public class CamelJaxbTest extends CamelTestSupport {
 
         MockEndpoint resultEndpoint = resolveMandatoryEndpoint("mock:result", MockEndpoint.class);
         resultEndpoint.expectedMessageCount(1);
+        resultEndpoint.expectedHeaderReceived(Exchange.CONTENT_TYPE, "application/xml");
         template.sendBody("direct:marshal", person);
         resultEndpoint.assertIsSatisfied();
 

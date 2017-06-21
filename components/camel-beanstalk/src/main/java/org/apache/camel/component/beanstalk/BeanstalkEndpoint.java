@@ -17,6 +17,7 @@
 package org.apache.camel.component.beanstalk;
 
 import com.surftools.BeanstalkClient.Client;
+import org.apache.camel.AsyncEndpoint;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
@@ -33,8 +34,11 @@ import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
 
-@UriEndpoint(scheme = "beanstalk", consumerClass = BeanstalkConsumer.class, label = "messaging")
-public class BeanstalkEndpoint extends ScheduledPollEndpoint {
+/**
+ * The beanstalk component is used for job retrieval and post-processing of Beanstalk jobs.
+ */
+@UriEndpoint(firstVersion = "2.15.0", scheme = "beanstalk", title = "Beanstalk", syntax = "beanstalk:connectionSettings", consumerClass = BeanstalkConsumer.class, label = "messaging")
+public class BeanstalkEndpoint extends ScheduledPollEndpoint implements AsyncEndpoint {
     final ConnectionSettings conn;
 
     @UriPath(description = "Connection settings host:port/tube")
@@ -47,11 +51,11 @@ public class BeanstalkEndpoint extends ScheduledPollEndpoint {
     private int jobDelay = BeanstalkComponent.DEFAULT_DELAY;
     @UriParam(defaultValue = "" + BeanstalkComponent.DEFAULT_TIME_TO_RUN)
     private int jobTimeToRun = BeanstalkComponent.DEFAULT_TIME_TO_RUN;
-    @UriParam
+    @UriParam(label = "consumer")
     private BeanstalkCommand onFailure = BeanstalkCommand.bury;
-    @UriParam(defaultValue = "true")
+    @UriParam(label = "consumer", defaultValue = "true")
     private boolean useBlockIO = true;
-    @UriParam(defaultValue = "true")
+    @UriParam(label = "consumer", defaultValue = "true")
     private boolean awaitJob = true;
 
     public BeanstalkEndpoint(final String uri, final Component component, final ConnectionSettings conn, final String connectionSettings) {
@@ -76,6 +80,11 @@ public class BeanstalkEndpoint extends ScheduledPollEndpoint {
         return command;
     }
 
+    /**
+     * put means to put the job into Beanstalk. Job body is specified in the Camel message body. Job ID will be returned in beanstalk.jobId message header.
+     * delete, release, touch or bury expect Job ID in the message header beanstalk.jobId. Result of the operation is returned in beanstalk.result message header
+     * kick expects the number of jobs to kick in the message body and returns the number of jobs actually kicked out in the message header beanstalk.result.
+     */
     public void setCommand(BeanstalkCommand command) {
         this.command = command;
     }

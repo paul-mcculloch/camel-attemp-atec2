@@ -32,15 +32,15 @@ public class PingCmdHeaderTest extends BaseDockerHeaderTest<PingCmd> {
 
     @Mock
     private PingCmd mockObject;
-    
+
     @Test
     public void pingHeaderTest() {
-        
+
         Map<String, Object> headers = getDefaultParameters();
         template.sendBodyAndHeaders("direct:in", "", headers);
-        
+
         Mockito.verify(dockerClient, Mockito.times(1)).pingCmd();
-        
+
     }
 
     @Override

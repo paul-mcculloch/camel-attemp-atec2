@@ -30,6 +30,8 @@ import org.apache.camel.impl.EmptyProducerCache;
 import org.apache.camel.impl.ProducerCache;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.UseLatestAggregationStrategy;
+import org.apache.camel.spi.EndpointUtilizationStatistics;
+import org.apache.camel.spi.IdAware;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.AsyncProcessorHelper;
 import org.apache.camel.util.ExchangeHelper;
@@ -48,16 +50,18 @@ import static org.apache.camel.util.ObjectHelper.notNull;
  *
  * @version 
  */
-public class RecipientList extends ServiceSupport implements AsyncProcessor {
+public class RecipientList extends ServiceSupport implements AsyncProcessor, IdAware {
 
     private static final Logger LOG = LoggerFactory.getLogger(RecipientList.class);
     private static final String IGNORE_DELIMITER_MARKER = "false";
     private final CamelContext camelContext;
+    private String id;
     private ProducerCache producerCache;
     private Expression expression;
     private final String delimiter;
     private boolean parallelProcessing;
     private boolean parallelAggregate;
+    private boolean stopOnAggregateException;
     private boolean stopOnException;
     private boolean ignoreInvalidEndpoints;
     private boolean streaming;
@@ -101,6 +105,14 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
         return "RecipientList[" + (expression != null ? expression : "") + "]";
     }
 
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
     public void process(Exchange exchange) throws Exception {
         AsyncProcessorHelper.process(this, exchange);
     }
@@ -134,7 +146,8 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
 
         RecipientListProcessor rlp = new RecipientListProcessor(exchange.getContext(), producerCache, iter, getAggregationStrategy(),
                 isParallelProcessing(), getExecutorService(), isShutdownExecutorService(),
-                isStreaming(), isStopOnException(), getTimeout(), getOnPrepare(), isShareUnitOfWork(), isParallelAggregate()) {
+                isStreaming(), isStopOnException(), getTimeout(), getOnPrepare(), isShareUnitOfWork(), isParallelAggregate(),
+                isStopOnAggregateException()) {
             @Override
             protected synchronized ExecutorService createAggregateExecutorService(String name) {
                 // use a shared executor service to avoid creating new thread pools
@@ -155,16 +168,8 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
             return true;
         }
 
-        AsyncProcessor target = rlp;
-        if (isShareUnitOfWork()) {
-            // wrap answer in a sub unit of work, since we share the unit of work
-            CamelInternalProcessor internalProcessor = new CamelInternalProcessor(rlp);
-            internalProcessor.addAdvice(new CamelInternalProcessor.SubUnitOfWorkProcessorAdvice());
-            target = internalProcessor;
-        }
-
         // now let the multicast process the exchange
-        return target.process(exchange, callback);
+        return rlp.process(exchange, callback);
     }
 
     protected Endpoint resolveEndpoint(Exchange exchange, Object recipient) {
@@ -173,6 +178,10 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
             recipient = ((String)recipient).trim();
         }
         return ExchangeHelper.resolveEndpoint(exchange, recipient);
+    }
+
+    public EndpointUtilizationStatistics getEndpointUtilizationStatistics() {
+        return producerCache.getEndpointUtilizationStatistics();
     }
 
     protected void doStart() throws Exception {
@@ -201,6 +210,14 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
         if (shutdownExecutorService && executorService != null) {
             camelContext.getExecutorServiceManager().shutdownNow(executorService);
         }
+    }
+
+    public Expression getExpression() {
+        return expression;
+    }
+
+    public String getDelimiter() {
+        return delimiter;
     }
 
     public boolean isStreaming() {
@@ -233,6 +250,14 @@ public class RecipientList extends ServiceSupport implements AsyncProcessor {
 
     public void setParallelAggregate(boolean parallelAggregate) {
         this.parallelAggregate = parallelAggregate;
+    }
+
+    public boolean isStopOnAggregateException() {
+        return stopOnAggregateException;
+    }
+
+    public void setStopOnAggregateException(boolean stopOnAggregateException) {
+        this.stopOnAggregateException = stopOnAggregateException;
     }
 
     public boolean isStopOnException() {

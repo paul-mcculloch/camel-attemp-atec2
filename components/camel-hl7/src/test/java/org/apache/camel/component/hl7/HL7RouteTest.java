@@ -16,9 +16,6 @@
  */
 package org.apache.camel.component.hl7;
 
-import java.security.SecureRandom;
-import java.util.Random;
-
 import ca.uhn.hl7v2.model.Message;
 import ca.uhn.hl7v2.model.v24.message.ADR_A19;
 import ca.uhn.hl7v2.model.v24.message.ADT_A01;
@@ -132,11 +129,11 @@ public class HL7RouteTest extends HL7TestSupport {
                     .choice()
                         // where we choose that A19 queries invoke the handleA19 method on our hl7service bean
                         .when(header("CamelHL7TriggerEvent").isEqualTo("A19"))
-                            .beanRef("hl7service", "handleA19")
+                            .bean("hl7service", "handleA19")
                             .to("mock:a19")
                         // and A01 should invoke the handleA01 method on our hl7service bean
                         .when(header("CamelHL7TriggerEvent").isEqualTo("A01")).to("mock:a01")
-                            .beanRef("hl7service", "handleA01")
+                            .bean("hl7service", "handleA01")
                             .to("mock:a19")
                         // other types should go to mock:unknown
                         .otherwise()

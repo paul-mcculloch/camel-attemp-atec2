@@ -16,11 +16,11 @@
  */
 package org.apache.camel.impl;
 
-import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.camel.spi.UuidGenerator;
+import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.InetAddressUtil;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
@@ -35,16 +35,23 @@ import org.slf4j.LoggerFactory;
  * <p/>
  * The JVM system property {@link #PROPERTY_IDGENERATOR_PORT} can be used to set a specific port
  * number to be used as part of the initialization process to generate unique UUID.
+ *
+ * @deprecated replaced by {@link DefaultUuidGenerator}
  */
+@Deprecated
 public class ActiveMQUuidGenerator implements UuidGenerator {
 
     // use same JVM property name as ActiveMQ
+    public static final String PROPERTY_IDGENERATOR_HOSTNAME = "activemq.idgenerator.hostname";
+    public static final String PROPERTY_IDGENERATOR_LOCALPORT = "activemq.idgenerator.localport";
     public static final String PROPERTY_IDGENERATOR_PORT = "activemq.idgenerator.port";
+
     private static final Logger LOG = LoggerFactory.getLogger(ActiveMQUuidGenerator.class);
     private static final String UNIQUE_STUB;
     private static int instanceCount;
     private static String hostName;
     private String seed;
+    // must use AtomicLong to ensure atomic get and update operation that is thread-safe
     private final AtomicLong sequence = new AtomicLong(1);
     private final int length;
 
@@ -61,15 +68,25 @@ public class ActiveMQUuidGenerator implements UuidGenerator {
         }
 
         if (canAccessSystemProps) {
+            hostName = System.getProperty(PROPERTY_IDGENERATOR_HOSTNAME);
+            int localPort = Integer.parseInt(System.getProperty(PROPERTY_IDGENERATOR_LOCALPORT, "0"));
+
             int idGeneratorPort = 0;
             ServerSocket ss = null;
             try {
-                idGeneratorPort = Integer.parseInt(System.getProperty(PROPERTY_IDGENERATOR_PORT, "0"));
-                LOG.trace("Using port {}", idGeneratorPort);
-                hostName = InetAddressUtil.getLocalHostName();
-                ss = new ServerSocket(idGeneratorPort);
-                stub = "-" + ss.getLocalPort() + "-" + System.currentTimeMillis() + "-";
-                Thread.sleep(100);
+                if (hostName == null) {
+                    hostName = InetAddressUtil.getLocalHostName();
+                }
+                if (localPort == 0) {
+                    idGeneratorPort = Integer.parseInt(System.getProperty(PROPERTY_IDGENERATOR_PORT, "0"));
+                    LOG.trace("Using port {}", idGeneratorPort);
+                    ss = new ServerSocket(idGeneratorPort);
+                    localPort = ss.getLocalPort();
+                    stub = "-" + localPort + "-" + System.currentTimeMillis() + "-";
+                    Thread.sleep(100);
+                } else {
+                    stub = "-" + localPort + "-" + System.currentTimeMillis() + "-";
+                }
             } catch (Exception e) {
                 if (LOG.isTraceEnabled()) {
                     LOG.trace("Cannot generate unique stub by using DNS and binding to local port: " + idGeneratorPort, e);
@@ -81,19 +98,7 @@ public class ActiveMQUuidGenerator implements UuidGenerator {
                     Thread.currentThread().interrupt();
                 }
             } finally {
-                // some environments, such as a PaaS may not allow us to create the ServerSocket
-                if (ss != null) {
-                    try {
-                        // TODO: replace the following line with IOHelper.close(ss) when Java 6 support is dropped
-                        ss.close();
-                    } catch (IOException ioe) {
-                        if (LOG.isTraceEnabled()) {
-                            LOG.trace("Closing the server socket failed", ioe);
-                        } else {
-                            LOG.warn("Closing the server socket failed due " + ioe.getMessage() + ". This exception is ignored.");
-                        }
-                    }
-                }
+                IOHelper.close(ss);
             }
         }
 

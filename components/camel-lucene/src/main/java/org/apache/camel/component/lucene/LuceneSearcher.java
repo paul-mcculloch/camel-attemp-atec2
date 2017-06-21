@@ -45,9 +45,9 @@ public class LuceneSearcher {
 
     public void open(File indexDirectory, Analyzer analyzer) throws IOException {
         if (indexDirectory != null) {
-            indexReader = DirectoryReader.open(new NIOFSDirectory(indexDirectory));
+            indexReader = DirectoryReader.open(new NIOFSDirectory(indexDirectory.toPath()));
         } else {
-            indexReader = DirectoryReader.open(new NIOFSDirectory(new File("./indexDirectory")));
+            indexReader = DirectoryReader.open(new NIOFSDirectory(new File("./indexDirectory").toPath()));
         }
         indexSearcher = new IndexSearcher(indexReader);
         this.analyzer = analyzer;
@@ -59,10 +59,10 @@ public class LuceneSearcher {
     }
     
     public Hits search(String searchPhrase, int maxNumberOfHits) throws Exception {
-        return search(searchPhrase, maxNumberOfHits, Version.LUCENE_4_9);
+        return search(searchPhrase, maxNumberOfHits, LuceneConstants.LUCENE_VERSION, false);
     }
 
-    public Hits search(String searchPhrase, int maxNumberOfHits, Version luceneVersion) throws Exception {
+    public Hits search(String searchPhrase, int maxNumberOfHits, Version luceneVersion, boolean returnLuceneDocs) throws Exception {
         Hits searchHits = new Hits();
 
         int numberOfHits = doSearch(searchPhrase, maxNumberOfHits, luceneVersion);
@@ -71,6 +71,9 @@ public class LuceneSearcher {
         for (ScoreDoc hit : hits) {
             Document selectedDocument = indexSearcher.doc(hit.doc);
             Hit aHit = new Hit();
+            if (returnLuceneDocs) {
+                aHit.setDocument(selectedDocument);
+            }
             aHit.setHitLocation(hit.doc);
             aHit.setScore(hit.score);
             aHit.setData(selectedDocument.get("contents"));
@@ -83,9 +86,9 @@ public class LuceneSearcher {
     private int doSearch(String searchPhrase, int maxNumberOfHits, Version luceneVersion) throws NullPointerException, ParseException, IOException {
         LOG.trace("*** Search Phrase: {} ***", searchPhrase);
 
-        QueryParser parser = new QueryParser(luceneVersion, "contents", analyzer);
+        QueryParser parser = new QueryParser("contents", analyzer);
         Query query = parser.parse(searchPhrase);
-        TopScoreDocCollector collector = TopScoreDocCollector.create(maxNumberOfHits, true);
+        TopScoreDocCollector collector = TopScoreDocCollector.create(maxNumberOfHits);
         indexSearcher.search(query, collector);
         hits = collector.topDocs().scoreDocs;
         

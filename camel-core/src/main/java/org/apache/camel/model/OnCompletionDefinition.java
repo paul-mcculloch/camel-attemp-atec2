@@ -35,23 +35,26 @@ import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.processor.CamelInternalProcessor;
 import org.apache.camel.processor.OnCompletionProcessor;
+import org.apache.camel.spi.AsPredicate;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.RouteContext;
 
 /**
- * Represents an XML &lt;onCompletion/&gt; element
+ * Route to be executed when normal route processing completes
  *
  * @version 
  */
+@Metadata(label = "configuration")
 @XmlRootElement(name = "onCompletion")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefinition> implements ExecutorServiceAwareDefinition<OnCompletionDefinition> {
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = "AfterConsumer")
     private OnCompletionMode mode;
     @XmlAttribute
     private Boolean onCompleteOnly;
     @XmlAttribute
     private Boolean onFailureOnly;
-    @XmlElement(name = "onWhen")
+    @XmlElement(name = "onWhen") @AsPredicate
     private WhenDefinition onWhen;
     @XmlAttribute
     private Boolean parallelProcessing;
@@ -91,11 +94,6 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
     }
 
     @Override
-    public String getShortName() {
-        return "onCompletion";
-    }
-
-    @Override
     public String getLabel() {
         return "onCompletion";
     }
@@ -121,8 +119,17 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
             routeScoped = super.getParent() != null;
         }
 
-        if (isOnCompleteOnly() && isOnFailureOnly()) {
+        boolean isOnCompleteOnly = getOnCompleteOnly() != null && getOnCompleteOnly();
+        boolean isOnFailureOnly = getOnFailureOnly() != null && getOnFailureOnly();
+        boolean isParallelProcessing = getParallelProcessing() != null && getParallelProcessing();
+        boolean original = getUseOriginalMessagePolicy() != null && getUseOriginalMessagePolicy();
+
+        if (isOnCompleteOnly && isOnFailureOnly) {
             throw new IllegalArgumentException("Both onCompleteOnly and onFailureOnly cannot be true. Only one of them can be true. On node: " + this);
+        }
+        if (original) {
+            // ensure allow original is turned on
+            routeContext.setAllowUseOriginalMessage(true);
         }
 
         String routeId = routeContext.getRoute().idOrCreate(routeContext.getCamelContext().getNodeIdFactory());
@@ -131,8 +138,7 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
 
         // wrap the on completion route in a unit of work processor
         CamelInternalProcessor internal = new CamelInternalProcessor(childProcessor);
-        internal.addAdvice(new CamelInternalProcessor.UnitOfWorkProcessorAdvice(routeId));
-        internal.addAdvice(new CamelInternalProcessor.RouteContextAdvice(routeContext));
+        internal.addAdvice(new CamelInternalProcessor.UnitOfWorkProcessorAdvice(routeContext));
 
         onCompletions.put(routeId, internal);
 
@@ -141,16 +147,14 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
             when = onWhen.getExpression().createPredicate(routeContext);
         }
 
-        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing());
-        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "OnCompletion", this, isParallelProcessing());
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing);
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "OnCompletion", this, isParallelProcessing);
 
         // should be after consumer by default
         boolean afterConsumer = mode == null || mode == OnCompletionMode.AfterConsumer;
 
-        // should be false by default
-        boolean original = getUseOriginalMessagePolicy() != null ? getUseOriginalMessagePolicy() : false;
         OnCompletionProcessor answer = new OnCompletionProcessor(routeContext.getCamelContext(), internal,
-                threadPool, shutdownThreadPool, isOnCompleteOnly(), isOnFailureOnly(), when, original, afterConsumer);
+                threadPool, shutdownThreadPool, isOnCompleteOnly, isOnFailureOnly, when, original, afterConsumer);
         return answer;
     }
 
@@ -210,7 +214,8 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
      * @return the builder
      */
     public OnCompletionDefinition onCompleteOnly() {
-        if (isOnFailureOnly()) {
+        boolean isOnFailureOnly = getOnFailureOnly() != null && getOnFailureOnly();
+        if (isOnFailureOnly) {
             throw new IllegalArgumentException("Both onCompleteOnly and onFailureOnly cannot be true. Only one of them can be true. On node: " + this);
         }
         // must define return type as OutputDefinition and not this type to avoid end user being able
@@ -226,7 +231,8 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
      * @return the builder
      */
     public OnCompletionDefinition onFailureOnly() {
-        if (isOnCompleteOnly()) {
+        boolean isOnCompleteOnly = getOnCompleteOnly() != null && getOnCompleteOnly();
+        if (isOnCompleteOnly) {
             throw new IllegalArgumentException("Both onCompleteOnly and onFailureOnly cannot be true. Only one of them can be true. On node: " + this);
         }
         // must define return type as OutputDefinition and not this type to avoid end user being able
@@ -244,7 +250,7 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
      * @param predicate predicate that determines true or false
      * @return the builder
      */
-    public OnCompletionDefinition onWhen(Predicate predicate) {
+    public OnCompletionDefinition onWhen(@AsPredicate Predicate predicate) {
         setOnWhen(new WhenDefinition(predicate));
         return this;
     }
@@ -261,23 +267,43 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
         return this;
     }
 
+    /**
+     * To use a custom Thread Pool to be used for parallel processing.
+     * Notice if you set this option, then parallel processing is automatic implied, and you do not have to enable that option as well.
+     */
     public OnCompletionDefinition executorService(ExecutorService executorService) {
         setExecutorService(executorService);
         return this;
     }
 
+    /**
+     * Refers to a custom Thread Pool to be used for parallel processing.
+     * Notice if you set this option, then parallel processing is automatic implied, and you do not have to enable that option as well.
+     */
     public OnCompletionDefinition executorServiceRef(String executorServiceRef) {
         setExecutorServiceRef(executorServiceRef);
         return this;
     }
 
     /**
-     * Doing the on completion work in parallel
+     * If enabled then the on completion process will run asynchronously by a separate thread from a thread pool.
+     * By default this is false, meaning the on completion process will run synchronously using the same caller thread as from the route.
      *
      * @return the builder
      */
     public OnCompletionDefinition parallelProcessing() {
         setParallelProcessing(true);
+        return this;
+    }
+
+    /**
+     * If enabled then the on completion process will run asynchronously by a separate thread from a thread pool.
+     * By default this is false, meaning the on completion process will run synchronously using the same caller thread as from the route.
+     *
+     * @return the builder
+     */
+    public OnCompletionDefinition parallelProcessing(boolean parallelProcessing) {
+        setParallelProcessing(parallelProcessing);
         return this;
     }
 
@@ -297,6 +323,11 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
         return mode;
     }
 
+    /**
+     * Sets the on completion mode.
+     * <p/>
+     * The default value is AfterConsumer
+     */
     public void setMode(OnCompletionMode mode) {
         this.mode = mode;
     }
@@ -309,20 +340,12 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
         this.onCompleteOnly = onCompleteOnly;
     }
 
-    public boolean isOnCompleteOnly() {
-        return onCompleteOnly != null && onCompleteOnly;
-    }
-
     public Boolean getOnFailureOnly() {
         return onFailureOnly;
     }
 
     public void setOnFailureOnly(Boolean onFailureOnly) {
         this.onFailureOnly = onFailureOnly;
-    }
-
-    public boolean isOnFailureOnly() {
-        return onFailureOnly != null && onFailureOnly;
     }
 
     public WhenDefinition getOnWhen() {
@@ -350,9 +373,14 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
     }
 
     public Boolean getUseOriginalMessagePolicy() {
-        return useOriginalMessagePolicy != null;
+        return useOriginalMessagePolicy;
     }
 
+    /**
+     * Will use the original input body when an {@link org.apache.camel.Exchange} for this on completion.
+     * <p/>
+     * By default this feature is off.
+     */
     public void setUseOriginalMessagePolicy(Boolean useOriginalMessagePolicy) {
         this.useOriginalMessagePolicy = useOriginalMessagePolicy;
     }
@@ -364,10 +392,5 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
     public void setParallelProcessing(Boolean parallelProcessing) {
         this.parallelProcessing = parallelProcessing;
     }
-
-    public boolean isParallelProcessing() {
-        return parallelProcessing != null && parallelProcessing;
-    }
-
 
 }

@@ -16,11 +16,23 @@
  */
 package org.apache.camel.component.aws.ec2.integration;
 
+<<<<<<< HEAD
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
+=======
+import java.util.ArrayList;
+import java.util.Collection;
+
+import com.amazonaws.services.ec2.model.InstanceType;
+
+>>>>>>> upstream/master
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.aws.ec2.EC2Constants;
+<<<<<<< HEAD
+=======
+import org.apache.camel.component.aws.ec2.EC2Operations;
+>>>>>>> upstream/master
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -29,6 +41,7 @@ import org.junit.Test;
 public class EC2ComponentIntegrationTest extends CamelTestSupport {
     
     @Test
+<<<<<<< HEAD
     public void listDomains() {
         Exchange exchange = template.send("direct:start", new Processor() {
             public void process(Exchange exchange) throws Exception {
@@ -40,14 +53,223 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
         assertNotNull(results);
     }
     
+=======
+    public void createAndRunInstancesTest() {
+        
+        template.send("direct:createAndRun", new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                exchange.getIn().setHeader(EC2Constants.IMAGE_ID, "ami-fd65ba94");
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_TYPE, InstanceType.T2Micro);
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MIN_COUNT, 1); 
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MAX_COUNT, 1);               
+            }
+        });
+    }
+    
+    @Test
+    public void createAndRunInstancesWithSecurityGroupsTest() {
+        
+        template.send("direct:createAndRun", new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                exchange.getIn().setHeader(EC2Constants.IMAGE_ID, "ami-fd65ba94");
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_TYPE, InstanceType.T2Micro);
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MIN_COUNT, 1); 
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MAX_COUNT, 1);  
+                Collection<String> secGroups = new ArrayList<String>();
+                secGroups.add("secgroup-1");
+                secGroups.add("secgroup-2");
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_SECURITY_GROUPS, secGroups);
+            }
+        });
+    }
+    
+    @Test
+    public void ec2CreateAndRunTestWithKeyPair() throws Exception {
+
+        Exchange exchange = template.request("direct:createAndRun", new Processor() {
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                exchange.getIn().setHeader(EC2Constants.OPERATION, EC2Operations.createAndRunInstances);
+                exchange.getIn().setHeader(EC2Constants.IMAGE_ID, "ami-fd65ba94");
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_TYPE, InstanceType.T2Micro);
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MIN_COUNT, 1);
+                exchange.getIn().setHeader(EC2Constants.INSTANCE_MAX_COUNT, 1);
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_KEY_PAIR, "keypair-1");
+            }
+        });
+    }
+    
+    @Test
+    public void stopInstances() {
+        
+        template.send("direct:stop", new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);            
+            }
+        });
+    }
+    
+    @Test
+    public void startInstances() {
+        
+        template.send("direct:start", new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);            
+            }
+        });
+    }
+    
+    @Test
+    public void terminateInstances() {
+        
+        template.send("direct:terminate", new Processor() {
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);            
+            }
+        });
+    }
+    
+    @Test
+    public void ec2DescribeInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:describe", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                
+            }
+        });
+
+    }
+    
+    @Test
+    public void ec2DescribeSpecificInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:describe", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("instance-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);   
+            }
+        });
+
+    }
+    
+    @Test
+    public void ec2DescribeInstancesStatusTest() throws Exception {
+
+        Exchange exchange = template.request("direct:describeStatus", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                
+            }
+        });
+
+    }
+    
+    @Test
+    public void ec2DescribeStatusSpecificInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:describeStatus", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);   
+            }
+        });
+
+    }
+    
+    @Test
+    public void ec2RebootInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:reboot", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);   
+            }
+        });
+
+    }
+    
+    
+    @Test
+    public void ec2MonitorInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:monitor", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);   
+            }
+        });
+        
+    }
+    
+    @Test
+    public void ec2UnmonitorInstancesTest() throws Exception {
+
+        Exchange exchange = template.request("direct:unmonitor", new Processor() {
+            
+            @Override
+            public void process(Exchange exchange) throws Exception {
+                Collection l = new ArrayList();
+                l.add("test-1");
+                exchange.getIn().setHeader(EC2Constants.INSTANCES_IDS, l);   
+            }
+        });
+    }
+
+>>>>>>> upstream/master
     @Override
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
+<<<<<<< HEAD
                 from("direct:start")
                         .to("aws-ec2://DescribeInstances?accessKey=xx&secretKey=yy");
             }
         };
     }
 }
+=======
+                from("direct:createAndRun")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=createAndRunInstances");
+                from("direct:stop")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=stopInstances");
+                from("direct:start")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=startInstances");
+                from("direct:terminate")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=terminateInstances");
+                from("direct:describe")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=describeInstances");
+                from("direct:describeStatus")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=describeInstancesStatus");
+                from("direct:reboot")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=rebootInstances");
+                from("direct:monitor")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=monitorInstances");
+                from("direct:unmonitor")
+                        .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=unmonitorInstances");
+            }
+        };
+    }
+}
+>>>>>>> upstream/master

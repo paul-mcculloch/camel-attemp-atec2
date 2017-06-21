@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,17 +23,15 @@ import com.wordnik.swagger.model._
 import com.wordnik.swagger.core.util.ModelUtil
 import com.wordnik.swagger.core.SwaggerSpec
 
-import org.apache.camel.model.rest.{VerbDefinition, RestDefinition}
+import org.apache.camel.model.rest.{RestOperationResponseMsgDefinition, RestOperationParamDefinition, VerbDefinition, RestDefinition}
 import org.apache.camel.util.FileUtil
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable.ListBuffer
 import com.wordnik.swagger.model.Parameter
 import com.wordnik.swagger.model.ApiDescription
-import scala.Some
 import com.wordnik.swagger.model.Operation
 import com.wordnik.swagger.model.ApiListing
-import scala.util.Sorting
 
 // to iterate Java list using for loop
 import scala.collection.JavaConverters._
@@ -56,7 +54,7 @@ class RestSwaggerReader {
       resourcePath = "/" + resourcePath
     }
 
-    LOG.debug("Reading rest path: {} -> {}", resourcePath, rest)
+    LOG.debug("Reading rest path: " + resourcePath + " -> " + rest)
 
     // create a list of apis
     val apis = new ListBuffer[ApiDescription]
@@ -109,7 +107,7 @@ class RestSwaggerReader {
         summary = ""
       }
 
-      LOG.debug("Adding operation {} {}", method, nickName)
+      LOG.debug("Adding operation " + method + " " + nickName)
 
       operations += Operation(
         method,
@@ -122,8 +120,8 @@ class RestSwaggerReader {
         consumes,
         List(),
         List(),
-        createParameters(verb, buildUrl(resourcePath, path)),
-        List(),
+        createParameters(verb),
+        createResponseMessages(verb),
         None)
     }
 
@@ -175,46 +173,40 @@ class RestSwaggerReader {
     else None
   }
 
-  def createParameters(verb: VerbDefinition, absPath : String): List[Parameter] = {
-    val parameters = new ListBuffer[Parameter]
+  def createResponseMessages(verb: VerbDefinition): List[ResponseMessage] = {
+    val responseMsgs = new ListBuffer[ResponseMessage]
 
-    // each {} is a parameter
-    val arr = absPath.split("\\/")
-    for (a <- arr) {
-      if (a.startsWith("{") && a.endsWith("}")) {
-        var key = a.substring(1, a.length - 1)
-
-        parameters += Parameter(
-          key,
-          None,
-          None,
-          true,
-          false,
-          "string",
-          AnyAllowableValues,
-          "path",
-          None
-        )
-      }
+    for (param:RestOperationResponseMsgDefinition <- verb.getResponseMsgs.asScala) {
+      responseMsgs += ResponseMessage(
+        param.getCode.asInstanceOf[Integer],
+        param.getMessage,
+        Option( param.getResponseModel )
+      )
     }
 
-    // if we have input type then its a body parameter
-    if (verb.getType != null) {
-      var bodyType = verb.getType
-      if (bodyType.endsWith("[]")) {
-        bodyType = "List[" + bodyType.substring(0, bodyType.length - 2) + "]"
+    responseMsgs.toList
+  }
+
+  def createParameters(verb: VerbDefinition): List[Parameter] = {
+    val parameters = new ListBuffer[Parameter]
+
+    for (param:RestOperationParamDefinition <- verb.getParams.asScala) {
+      var allowValues=AnyAllowableValues
+
+      if(!param.getAllowableValues.isEmpty){
+        AllowableListValues(param.getAllowableValues.asScala.toList)
       }
 
       parameters += Parameter(
-        "body",
-        None,
-        None,
-        true,
+        param.getName,
+        Some( param.getDescription ),
+        Some( param.getDefaultValue),
+        if (param.getRequired != null) param.getRequired.booleanValue() else false,
         false,
-        bodyType,
-        AnyAllowableValues,
-        "body",
-        None
+        param.getDataType,
+        allowValues,
+        param.getType.toString,
+        Some(param.getAccess)
       )
     }
 

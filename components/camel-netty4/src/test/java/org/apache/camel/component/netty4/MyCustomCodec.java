@@ -58,8 +58,6 @@ public final class MyCustomCodec {
                 int readerIndex = msg.readerIndex();
                 msg.getBytes(readerIndex, bytes);
                 out.add(bytes);
-            } else {
-                out.add((byte[])null);
             }
         }
 
@@ -70,7 +68,7 @@ public final class MyCustomCodec {
 
         @Override
         protected void encode(ChannelHandlerContext ctx, byte[] msg, List<Object> out) throws Exception {
-            byte[] bytes = (byte[])msg;
+            byte[] bytes = msg;
             ByteBuf buf = ByteBufAllocator.DEFAULT.buffer(bytes.length);
             buf.writeBytes(bytes);
             out.add(buf);

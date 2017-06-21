@@ -18,9 +18,6 @@ package org.apache.camel.commands;
 
 import java.io.PrintStream;
 
-import org.apache.camel.CamelContext;
-import org.apache.camel.Route;
-
 /**
  * Command to start a route.
  */
@@ -31,7 +28,7 @@ public class RouteStartCommand extends AbstractRouteCommand {
     }
 
     @Override
-    public void executeOnRoute(CamelController camelController, CamelContext camelContext, Route camelRoute, PrintStream out, PrintStream err) throws Exception {
-        camelContext.startRoute(camelRoute.getId());
+    public void executeOnRoute(CamelController camelController, String contextName, String routeId, PrintStream out, PrintStream err) throws Exception {
+        camelController.startRoute(contextName, routeId);
     }
 }

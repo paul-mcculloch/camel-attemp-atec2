@@ -22,31 +22,33 @@ import java.net.URISyntaxException;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
-import org.apache.camel.component.http.HttpClientConfigurer;
 import org.apache.camel.component.servlet.ServletEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
-import org.apache.commons.httpclient.HttpConnectionManager;
-import org.apache.commons.httpclient.params.HttpClientParams;
 
 /**
- *
+ * To exchange data with external Websocket clients using Atmosphere.
  */
-@UriEndpoint(scheme = "atmosphere-websocket", consumerClass = WebsocketConsumer.class)
+@UriEndpoint(firstVersion = "2.14.0", scheme = "atmosphere-websocket", extendsScheme = "servlet", title = "Atmosphere Websocket",
+        syntax = "atmosphere-websocket:servicePath", consumerClass = WebsocketConsumer.class, label = "websocket",
+        excludeProperties = "httpUri,contextPath,authMethod,authMethodPriority,authUsername,authPassword,authDomain,authHost"
+                + "proxyAuthScheme,proxyAuthMethod,proxyAuthUsername,proxyAuthPassword,proxyAuthHost,proxyAuthPort,proxyAuthDomain")
 public class WebsocketEndpoint extends ServletEndpoint {
 
-    @UriPath
-    private String servicePath;
     private WebSocketStore store;
-    @UriParam(defaultValue = "false")
+    private WebsocketConsumer websocketConsumer;
+
+    @UriPath(description = "Name of websocket endpoint") @Metadata(required = "true")
+    private String servicePath;
+    @UriParam
     private boolean sendToAll;
-    @UriParam(defaultValue = "false")
+    @UriParam
     private boolean useStreaming;
     
-    public WebsocketEndpoint(String endPointURI, WebsocketComponent component, URI httpUri, HttpClientParams params, HttpConnectionManager httpConnectionManager,
-                             HttpClientConfigurer clientConfigurer) throws URISyntaxException {
-        super(endPointURI, component, httpUri, params, httpConnectionManager, clientConfigurer);
+    public WebsocketEndpoint(String endPointURI, WebsocketComponent component, URI httpUri) throws URISyntaxException {
+        super(endPointURI, component, httpUri);
 
         //TODO find a better way of assigning the store
         int idx = endPointURI.indexOf('?');
@@ -63,7 +65,8 @@ public class WebsocketEndpoint extends ServletEndpoint {
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        return new WebsocketConsumer(this, processor);
+        websocketConsumer = new WebsocketConsumer(this, processor);
+        return websocketConsumer;
     }
 
     @Override
@@ -71,29 +74,23 @@ public class WebsocketEndpoint extends ServletEndpoint {
         return true;
     }
 
-    /**
-     * @return the sendToAll
-     */
     public boolean isSendToAll() {
         return sendToAll;
     }
 
     /**
-     * @param sendToAll the sendToAll to set
+     * Whether to send to all (broadcast) or send to a single receiver.
      */
     public void setSendToAll(boolean sendToAll) {
         this.sendToAll = sendToAll;
     }
     
-    /**
-     * @return the useStreaming
-     */
     public boolean isUseStreaming() {
         return useStreaming;
     }
 
     /**
-     * @param useStreaming the useStreaming to set
+     * To enable streaming to send data as multiple text fragments.
      */
     public void setUseStreaming(boolean useStreaming) {
         this.useStreaming = useStreaming;
@@ -101,5 +98,9 @@ public class WebsocketEndpoint extends ServletEndpoint {
 
     WebSocketStore getWebSocketStore() {
         return store;
+    }
+
+    public WebsocketConsumer getWebsocketConsumer() {
+        return websocketConsumer;
     }
 }

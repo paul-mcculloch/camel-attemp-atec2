@@ -17,6 +17,7 @@
 package org.apache.camel.component.aws.ec2;
 
 /**
+<<<<<<< HEAD
  * Constants used in Camel AWS EC2 component
  */
 public interface EC2Constants {
@@ -25,4 +26,26 @@ public interface EC2Constants {
     String NEXT_TOKEN = "CamelAwsEC2NextToken";
     String DESCRIBE_INSTANCES_RESULTS = "CamelAwsEC2DescribeInstanceResults";
     String OPERATION =  "CamelAwsEC2Operation";;
+=======
+ * Constants used in Camel AWS EC2 module
+ * 
+ */
+public interface EC2Constants {
+
+    String IMAGE_ID                 = "CamelAwsEC2ImageId";
+    String INSTANCE_TYPE            = "CamelAwsEC2InstanceType";
+    String OPERATION                = "CamelAwsEC2Operation";
+    String INSTANCE_MIN_COUNT       = "CamelAwsEC2InstanceMinCount";
+    String INSTANCE_MAX_COUNT       = "CamelAwsEC2InstanceMaxCount";
+    String INSTANCE_MONITORING      = "CamelAwsEC2InstanceMonitoring";
+    String INSTANCE_KERNEL_ID       = "CamelAwsEC2InstanceKernelId";
+    String INSTANCE_EBS_OPTIMIZED   = "CamelAwsEC2InstanceEbsOptimized";
+    String INSTANCE_SECURITY_GROUPS = "CamelAwsEC2InstanceSecurityGroups";
+    String INSTANCES_IDS            = "CamelAwsEC2InstancesIds";
+    String INSTANCES_KEY_PAIR       = "CamelAwsEC2InstancesKeyPair";
+    String INSTANCES_CLIENT_TOKEN   = "CamelAwsEC2InstancesClientToken";
+    String INSTANCES_PLACEMENT      = "CamelAwsEC2InstancesPlacement";
+    String INSTANCES_TAGS           = "CamelAwsEC2InstancesTags";
+    String SUBNET_ID                = "CamelAwsEC2SubnetId";
+>>>>>>> upstream/master
 }

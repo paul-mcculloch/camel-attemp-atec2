@@ -25,7 +25,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Route;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
-import org.apache.camel.impl.RoutePolicySupport;
+import org.apache.camel.support.RoutePolicySupport;
 
 /**
  * @version 
@@ -119,7 +119,7 @@ public class ManagedSuspendedServiceTest extends ManagementTestSupport {
             // only stop it at first run
             if (counter++ == 0) {
                 try {
-                    super.stopConsumer(route.getConsumer());
+                    super.suspendOrStopConsumer(route.getConsumer());
                 } catch (Exception e) {
                     handleException(e);
                 }

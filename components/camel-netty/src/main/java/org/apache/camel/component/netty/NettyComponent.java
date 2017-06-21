@@ -24,19 +24,26 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
+import org.apache.camel.SSLContextParametersAware;
 import org.apache.camel.impl.UriEndpointComponent;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.concurrent.CamelThreadFactory;
 import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.jboss.netty.util.HashedWheelTimer;
 import org.jboss.netty.util.Timer;
 
-public class NettyComponent extends UriEndpointComponent {
+public class NettyComponent extends UriEndpointComponent implements SSLContextParametersAware {
     // use a shared timer for Netty (see javadoc for HashedWheelTimer)
-    private static volatile Timer timer;
+    private Timer timer;
+    private volatile OrderedMemoryAwareThreadPoolExecutor executorService;
+
+    @Metadata(label = "advanced")
     private NettyConfiguration configuration;
+    @Metadata(label = "advanced", defaultValue = "16")
     private int maximumPoolSize = 16;
-    private OrderedMemoryAwareThreadPoolExecutor executorService;
+    @Metadata(label = "security", defaultValue = "false")
+    private boolean useGlobalSslContextParameters;
 
     public NettyComponent() {
         super(NettyEndpoint.class);
@@ -69,6 +76,10 @@ public class NettyComponent extends UriEndpointComponent {
             }
         }
 
+        if (config.getSslContextParameters() == null) {
+            config.setSslContextParameters(retrieveGlobalSslContextParameters());
+        }
+
         // validate config
         config.validateConfiguration();
 
@@ -92,6 +103,9 @@ public class NettyComponent extends UriEndpointComponent {
         return configuration;
     }
 
+    /**
+     * To use the NettyConfiguration as configuration when creating endpoints.
+     */
     public void setConfiguration(NettyConfiguration configuration) {
         this.configuration = configuration;
     }
@@ -100,11 +114,29 @@ public class NettyComponent extends UriEndpointComponent {
         return maximumPoolSize;
     }
 
+    /**
+     * The core pool size for the ordered thread pool, if its in use.
+     * <p/>
+     * The default value is 16.
+     */
     public void setMaximumPoolSize(int maximumPoolSize) {
         this.maximumPoolSize = maximumPoolSize;
     }
 
-    public static Timer getTimer() {
+    @Override
+    public boolean isUseGlobalSslContextParameters() {
+        return this.useGlobalSslContextParameters;
+    }
+
+    /**
+     * Enable usage of global SSL context parameters.
+     */
+    @Override
+    public void setUseGlobalSslContextParameters(boolean useGlobalSslContextParameters) {
+        this.useGlobalSslContextParameters = useGlobalSslContextParameters;
+    }
+
+    public Timer getTimer() {
         return timer;
     }
 
@@ -138,17 +170,23 @@ public class NettyComponent extends UriEndpointComponent {
         // replies in the expected order. eg this is required by TCP.
         // and use a Camel thread factory so we have consistent thread namings
         // we should use a shared thread pool as recommended by Netty
+        
+        // NOTE: if we don't specify the MaxChannelMemorySize and MaxTotalMemorySize, the thread pool
+        // could eat up all the heap memory when the tasks are added very fast
+        
         String pattern = getCamelContext().getExecutorServiceManager().getThreadNamePattern();
         ThreadFactory factory = new CamelThreadFactory(pattern, "NettyOrderedWorker", true);
         return new OrderedMemoryAwareThreadPoolExecutor(getMaximumPoolSize(),
-                0L, 0L, 30, TimeUnit.SECONDS, factory);
+                configuration.getMaxChannelMemorySize(), configuration.getMaxTotalMemorySize(),
+                30, TimeUnit.SECONDS, factory);
     }
 
     @Override
     protected void doStop() throws Exception {
-        timer.stop();
-        timer = null;
-
+        if (timer != null) {
+            timer.stop();
+            timer = null;
+        }
         if (executorService != null) {
             getCamelContext().getExecutorServiceManager().shutdownNow(executorService);
             executorService = null;

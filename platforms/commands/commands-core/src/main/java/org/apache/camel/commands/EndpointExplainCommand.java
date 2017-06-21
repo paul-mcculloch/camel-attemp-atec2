@@ -17,13 +17,10 @@
 package org.apache.camel.commands;
 
 import java.io.PrintStream;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.camel.Endpoint;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.JsonSchemaHelper;
 import org.apache.camel.util.URISupport;
@@ -31,45 +28,47 @@ import org.apache.camel.util.URISupport;
 /**
  * Explain the Camel endpoints available in the JVM.
  */
-public class EndpointExplainCommand extends AbstractCamelCommand {
+public class EndpointExplainCommand extends AbstractContextCommand {
 
-    private String name;
     private boolean verbose;
     private String filter;
 
     public EndpointExplainCommand(String name, boolean verbose, String filter) {
-        this.name = name;
+        super(name);
         this.verbose = verbose;
         this.filter = filter;
     }
 
     @Override
-    public Object execute(CamelController camelController, PrintStream out, PrintStream err) throws Exception {
-        List<Endpoint> endpoints = camelController.getEndpoints(name);
+    protected Object performContextCommand(CamelController camelController, String contextName, PrintStream out, PrintStream err) throws Exception {
+        List<Map<String, String>> endpoints = camelController.getEndpoints(contextName);
         if (endpoints == null || endpoints.isEmpty()) {
             return null;
         }
 
         // filter endpoints
         if (filter != null) {
-            Iterator<Endpoint> it = endpoints.iterator();
+            Iterator<Map<String, String>> it = endpoints.iterator();
             while (it.hasNext()) {
-                Endpoint endpoint = it.next();
-                if (!EndpointHelper.matchPattern(endpoint.getEndpointUri(), filter)) {
+                Map<String, String> row = it.next();
+                if (!EndpointHelper.matchPattern(row.get("uri"), filter)) {
                     // did not match
                     it.remove();
                 }
             }
         }
 
-        for (Endpoint endpoint : endpoints) {
-            String json = camelController.explainEndpoint(endpoint.getCamelContext().getName(), endpoint.getEndpointUri(), verbose);
+        for (Map<String, String> row : endpoints) {
+            String json = camelController.explainEndpointAsJSon(context, row.get("uri"), verbose);
+            if (json == null) {
+                continue;
+            }
 
-            out.println("Context:\t" + endpoint.getCamelContext().getName());
+            out.println("Context:       " + context);
 
             // sanitize and mask uri so we dont see passwords
-            String uri = URISupport.sanitizeUri(endpoint.getEndpointUri());
-            String header = "Uri:            " + uri;
+            String uri = URISupport.sanitizeUri(row.get("uri"));
+            String header = "Uri:           " + uri;
             out.println(header);
             for (int i = 0; i < header.length(); i++) {
                 out.print('-');
@@ -79,47 +78,42 @@ public class EndpointExplainCommand extends AbstractCamelCommand {
             // use a basic json parser
             List<Map<String, String>> options = JsonSchemaHelper.parseJsonSchema("properties", json, true);
 
-            // lets sort the options by name
-            Collections.sort(options, new Comparator<Map<String, String>>() {
-                @Override
-                public int compare(Map<String, String> o1, Map<String, String> o2) {
-                    // sort by kind first (need to -1 as we want path on top), then name
-                    int answer = -1 * o1.get("kind").compareTo(o2.get("kind"));
-                    if (answer == 0) {
-                        answer = o1.get("name").compareTo(o2.get("name"));
-                    }
-                    return answer;
-                }
-            });
-
             for (Map<String, String> option : options) {
-                out.print("Option:\t\t");
+                out.print("Option:        ");
                 out.println(option.get("name"));
-                out.print("Kind:\t\t");
-                out.println(option.get("kind"));
+                String kind = option.get("kind");
+                if (kind != null) {
+                    out.print("Kind:          ");
+                    out.println(kind);
+                }
+                String group = option.get("group");
+                if (group != null) {
+                    out.print("Group:         ");
+                    out.println(group);
+                }
                 String type = option.get("type");
                 if (type != null) {
-                    out.print("Type:\t\t");
+                    out.print("Type:          ");
                     out.println(type);
                 }
                 String javaType = option.get("javaType");
                 if (javaType != null) {
-                    out.print("Java Type:\t");
+                    out.print("Java Type:     ");
                     out.println(javaType);
                 }
                 String value = option.get("value");
                 if (value != null) {
-                    out.print("Value:\t\t");
+                    out.print("Value:         ");
                     out.println(value);
                 }
                 String defaultValue = option.get("defaultValue");
                 if (defaultValue != null) {
-                    out.print("Default Value:\t");
+                    out.print("Default Value: ");
                     out.println(defaultValue);
                 }
                 String description = option.get("description");
                 if (description != null) {
-                    out.print("Description:\t");
+                    out.print("Description:   ");
                     out.println(description);
                 }
                 out.println();

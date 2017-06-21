@@ -18,17 +18,13 @@ package org.apache.camel.component.binding;
 
 import java.util.Map;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
-import org.apache.camel.spi.Binding;
-import org.apache.camel.util.CamelContextHelper;
-
-import static org.apache.camel.util.CamelContextHelper.getMandatoryEndpoint;
 
 /**
- * To compose a Camel component with a Camel data-format as a single binding unit.
+ * The <a href="http://camel.apache.org/binding.html>Binding Component<a/> is for composing a Camel component with a Camel data-format as a single binding unit.
  * <p/>
+ *
  * A Binding component using the URI form <code>binding:nameOfBinding:endpointURI</code>
  * to extract the binding name which is then resolved from the registry and used to create a
  * {@link BindingEndpoint} from the underlying {@link Endpoint}
@@ -43,7 +39,6 @@ public class BindingNameComponent extends UriEndpointComponent {
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        CamelContext camelContext = getCamelContext();
         int idx = remaining.indexOf(":");
         if (idx <= 0) {
             throw new IllegalArgumentException(BAD_FORMAT_MESSAGE);
@@ -53,9 +48,7 @@ public class BindingNameComponent extends UriEndpointComponent {
         if (delegateURI.isEmpty()) {
             throw new IllegalArgumentException(BAD_FORMAT_MESSAGE);
         }
-        Binding binding = CamelContextHelper.mandatoryLookup(camelContext, bindingName, Binding.class);
-        Endpoint delegate = getMandatoryEndpoint(camelContext, delegateURI);
-        return new BindingEndpoint(uri, this, binding,  delegate);
+        return new BindingEndpoint(uri, this, bindingName, delegateURI);
     }
 
 }

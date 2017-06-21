@@ -17,21 +17,21 @@
 package org.apache.camel.component.google.drive;
 
 import com.google.api.services.drive.Drive;
-
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.component.google.drive.internal.GoogleDriveApiCollection;
 import org.apache.camel.component.google.drive.internal.GoogleDriveApiName;
-import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.component.AbstractApiComponent;
 
 /**
  * Represents the component that manages {@link GoogleDriveEndpoint}.
  */
-@UriEndpoint(scheme = "google-drive", consumerClass = GoogleDriveConsumer.class, consumerPrefix = "consumer")
 public class GoogleDriveComponent extends AbstractApiComponent<GoogleDriveApiName, GoogleDriveConfiguration, GoogleDriveApiCollection> {
 
+    @Metadata(label = "advanced")
     private Drive client;
+    @Metadata(label = "advanced")
     private GoogleDriveClientFactory clientFactory;
     
     public GoogleDriveComponent() {
@@ -47,10 +47,11 @@ public class GoogleDriveComponent extends AbstractApiComponent<GoogleDriveApiNam
         return GoogleDriveApiName.fromValue(apiNameStr);
     }
 
-    public Drive getClient() {
+    public Drive getClient(GoogleDriveConfiguration googleDriveConfiguration) {
         if (client == null) {
-            client = getClientFactory().makeClient(configuration.getClientId(), configuration.getClientSecret(), configuration.getScopes(), 
-                configuration.getApplicationName(), configuration.getRefreshToken(), configuration.getAccessToken());
+            client = getClientFactory().makeClient(googleDriveConfiguration.getClientId(), googleDriveConfiguration.getClientSecret(), 
+                    googleDriveConfiguration.getScopes(), googleDriveConfiguration.getApplicationName(), 
+                    googleDriveConfiguration.getRefreshToken(), googleDriveConfiguration.getAccessToken());
         }
         return client;
     }
@@ -62,6 +63,26 @@ public class GoogleDriveComponent extends AbstractApiComponent<GoogleDriveApiNam
         return clientFactory;
     }
 
+    /**
+     * To use the shared configuration
+     */
+    @Override
+    public void setConfiguration(GoogleDriveConfiguration configuration) {
+        super.setConfiguration(configuration);
+    }
+
+    @Override
+    public GoogleDriveConfiguration getConfiguration() {
+        if (configuration == null) {
+            configuration = new GoogleDriveConfiguration();
+        }
+        return super.getConfiguration();
+    }
+
+    /**
+     * To use the GoogleCalendarClientFactory as factory for creating the client.
+     * Will by default use {@link BatchGoogleDriveClientFactory}
+     */
     public void setClientFactory(GoogleDriveClientFactory clientFactory) {
         this.clientFactory = clientFactory;
     }
@@ -69,6 +90,10 @@ public class GoogleDriveComponent extends AbstractApiComponent<GoogleDriveApiNam
     @Override
     protected Endpoint createEndpoint(String uri, String methodName, GoogleDriveApiName apiName,
                                       GoogleDriveConfiguration endpointConfiguration) {
-        return new GoogleDriveEndpoint(uri, this, apiName, methodName, endpointConfiguration);
+        endpointConfiguration.setApiName(apiName);
+        endpointConfiguration.setMethodName(methodName);
+        GoogleDriveEndpoint endpoint = new GoogleDriveEndpoint(uri, this, apiName, methodName, endpointConfiguration);
+        endpoint.setClientFactory(clientFactory);
+        return endpoint;
     }
 }

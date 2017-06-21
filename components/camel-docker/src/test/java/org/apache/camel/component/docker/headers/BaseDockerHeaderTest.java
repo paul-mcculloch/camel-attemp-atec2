@@ -32,94 +32,132 @@ import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+
 @RunWith(PowerMockRunner.class)
+@PowerMockIgnore({"javax.management.*", "javax.net.ssl.*"})
 public abstract class BaseDockerHeaderTest<T> extends CamelTestSupport {
-    
+
     @Mock
     protected DockerClient dockerClient;
-        
-    protected DockerConfiguration dockerConfiguration;    
-    
+
+    protected DockerConfiguration dockerConfiguration;
+
     @Mock
     T mockObject;
-    
+
     @Override
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
-            
+
             @Override
             public void configure() throws Exception {
                 from("direct:in").to("docker://" + getOperation().toString());
-                
+
             }
         };
-        
-    }   
-    
+
+    }
+
     @Before
     public void setupTest() {
         setupMocks();
     }
-    
+
     @Override
     protected CamelContext createCamelContext() throws Exception {
         CamelContext camelContext = super.createCamelContext();
         dockerConfiguration = new DockerConfiguration();
         dockerConfiguration.setParameters(getDefaultParameters());
-        
-        
-        dockerConfiguration.setClient(getClientProfile(), dockerClient);
-        
-        DockerComponent dockerComponent = new DockerComponent(dockerConfiguration);
-        camelContext.addComponent("docker", dockerComponent);
-        
 
-        
+        DockerComponent dockerComponent = new DockerComponent(dockerConfiguration);
+        dockerComponent.setClient(getClientProfile(), dockerClient);
+
+        camelContext.addComponent("docker", dockerComponent);
+
         return camelContext;
     }
-    
-    
+
     protected String getHost() {
         return "localhost";
     }
-    
+
     protected Integer getPort() {
         return 5000;
     }
-    
+
     protected String getEmail() {
         return "docker@camel.apache.org";
     }
-    
+
+    protected Integer getMaxPerRouteConnections() {
+        return 100;
+    }
+
+    protected Integer getMaxTotalConnections() {
+        return 100;
+    }
+
+    protected String getServerAddress() {
+        return "https://index.docker.io/v1/";
+    }
+
+    public boolean isSecure() {
+        return false;
+    }
+
+    public boolean isTlsVerify() {
+        return false;
+    }
+
+    public boolean isSocket() {
+        return false;
+    }
+
+    public String getCmdExecFactory() {
+        return DockerConstants.DEFAULT_CMD_EXEC_FACTORY;
+    }
+
     public T getMockObject() {
         return mockObject;
     }
-    
+
     protected Map<String, Object> getDefaultParameters() {
         Map<String, Object> parameters = new HashMap<String, Object>();
         parameters.put(DockerConstants.DOCKER_HOST, getHost());
         parameters.put(DockerConstants.DOCKER_PORT, getPort());
         parameters.put(DockerConstants.DOCKER_EMAIL, getEmail());
-
+        parameters.put(DockerConstants.DOCKER_SERVER_ADDRESS, getServerAddress());
+        parameters.put(DockerConstants.DOCKER_MAX_PER_ROUTE_CONNECTIONS, getMaxPerRouteConnections());
+        parameters.put(DockerConstants.DOCKER_MAX_TOTAL_CONNECTIONS, getMaxTotalConnections());
+        parameters.put(DockerConstants.DOCKER_SECURE, isSecure());
+        parameters.put(DockerConstants.DOCKER_TLSVERIFY, isTlsVerify());
+        parameters.put(DockerConstants.DOCKER_SOCKET_ENABLED, isSocket());
+        parameters.put(DockerConstants.DOCKER_CMD_EXEC_FACTORY, getCmdExecFactory());
         return parameters;
     }
-    
+
     protected DockerClientProfile getClientProfile() {
         DockerClientProfile clientProfile = new DockerClientProfile();
         clientProfile.setHost(getHost());
         clientProfile.setPort(getPort());
         clientProfile.setEmail(getEmail());
-        
+        clientProfile.setServerAddress(getServerAddress());
+        clientProfile.setMaxPerRouteConnections(getMaxPerRouteConnections());
+        clientProfile.setMaxTotalConnections(getMaxTotalConnections());
+        clientProfile.setSecure(isSecure());
+        clientProfile.setTlsVerify(isTlsVerify());
+        clientProfile.setSocket(isSocket());
+        clientProfile.setCmdExecFactory(getCmdExecFactory());
+
         return clientProfile;
 
     }
-    
-    
+
     protected abstract void setupMocks();
-    
+
     protected abstract DockerOperation getOperation();
-         
-    
+
 }

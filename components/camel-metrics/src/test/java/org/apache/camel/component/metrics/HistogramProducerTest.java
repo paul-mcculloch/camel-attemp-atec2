@@ -18,10 +18,8 @@ package org.apache.camel.component.metrics;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.impl.DefaultCamelContext;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,8 +29,8 @@ import org.mockito.Mockito;
 import org.mockito.runners.MockitoJUnitRunner;
 
 import static org.apache.camel.component.metrics.MetricsConstants.HEADER_HISTOGRAM_VALUE;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
@@ -90,13 +88,14 @@ public class HistogramProducerTest {
 
     @Test
     public void testProcessValueNotSet() throws Exception {
+        Object action = null;
         when(endpoint.getValue()).thenReturn(null);
         when(in.getHeader(HEADER_HISTOGRAM_VALUE, null, Long.class)).thenReturn(null);
         producer.doProcess(exchange, endpoint, registry, METRICS_NAME);
         inOrder.verify(exchange, times(1)).getIn();
         inOrder.verify(registry, times(1)).histogram(METRICS_NAME);
         inOrder.verify(endpoint, times(1)).getValue();
-        inOrder.verify(in, times(1)).getHeader(HEADER_HISTOGRAM_VALUE, null, Long.class);
+        inOrder.verify(in, times(1)).getHeader(HEADER_HISTOGRAM_VALUE, action, Long.class);
         inOrder.verifyNoMoreInteractions();
     }
 
@@ -113,16 +112,4 @@ public class HistogramProducerTest {
         inOrder.verifyNoMoreInteractions();
     }
 
-    @Test
-    public void testProcessOverrideUriValueNotSet() throws Exception {
-        when(endpoint.getValue()).thenReturn(null);
-        when(in.getHeader(HEADER_HISTOGRAM_VALUE, null, Long.class)).thenReturn(VALUE + 2);
-        producer.doProcess(exchange, endpoint, registry, METRICS_NAME);
-        inOrder.verify(exchange, times(1)).getIn();
-        inOrder.verify(registry, times(1)).histogram(METRICS_NAME);
-        inOrder.verify(endpoint, times(1)).getValue();
-        inOrder.verify(in, times(1)).getHeader(HEADER_HISTOGRAM_VALUE, null, Long.class);
-        inOrder.verify(histogram, times(1)).update(VALUE + 2);
-        inOrder.verifyNoMoreInteractions();
-    }
 }

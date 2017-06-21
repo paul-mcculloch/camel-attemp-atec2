@@ -24,11 +24,17 @@ import java.util.Map;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.Consumer;
+import org.apache.camel.Endpoint;
+import org.apache.camel.Exchange;
+import org.apache.camel.Producer;
 import org.apache.camel.Route;
 import org.apache.camel.Service;
 import org.apache.camel.ServiceStatus;
 import org.apache.camel.StatefulService;
 import org.apache.camel.StaticService;
+import org.apache.camel.component.rest.RestApiEndpoint;
+import org.apache.camel.component.rest.RestEndpoint;
+import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.spi.RestRegistry;
 import org.apache.camel.support.LifecycleStrategySupport;
 import org.apache.camel.support.ServiceSupport;
@@ -38,10 +44,11 @@ public class DefaultRestRegistry extends ServiceSupport implements StaticService
 
     private CamelContext camelContext;
     private final Map<Consumer, RestService> registry = new LinkedHashMap<Consumer, RestService>();
+    private transient Producer apiProducer;
 
     public void addRestService(Consumer consumer, String url, String baseUrl, String basePath, String uriTemplate, String method,
-                               String consumes, String produces, String inType, String outType) {
-        RestServiceEntry entry = new RestServiceEntry(consumer, url, baseUrl, basePath, uriTemplate, method, consumes, produces, inType, outType);
+                               String consumes, String produces, String inType, String outType, String routeId, String description) {
+        RestServiceEntry entry = new RestServiceEntry(consumer, url, baseUrl, basePath, uriTemplate, method, consumes, produces, inType, outType, routeId, description);
         registry.put(consumer, entry);
     }
 
@@ -57,6 +64,62 @@ public class DefaultRestRegistry extends ServiceSupport implements StaticService
     @Override
     public int size() {
         return registry.size();
+    }
+
+    @Override
+    public String apiDocAsJson() {
+        // see if there is a rest-api endpoint which would be the case if rest api-doc has been explicit enabled
+        if (apiProducer == null) {
+            Endpoint restApiEndpoint = null;
+            Endpoint restEndpoint = null;
+            for (Map.Entry<String, Endpoint> entry : camelContext.getEndpointMap().entrySet()) {
+                String uri = entry.getKey();
+                if (uri.startsWith("rest-api:")) {
+                    restApiEndpoint = entry.getValue();
+                    break;
+                } else if (restEndpoint == null && uri.startsWith("rest:")) {
+                    restEndpoint = entry.getValue();
+                }
+            }
+
+            if (restApiEndpoint == null && restEndpoint != null) {
+                // no rest-api has been explicit enabled, then we need to create it first
+                RestEndpoint rest = (RestEndpoint) restEndpoint;
+                String componentName = rest.getComponentName();
+
+                if (componentName != null) {
+                    RestConfiguration config = camelContext.getRestConfiguration(componentName, true);
+                    String apiComponent = config.getApiComponent() != null ? config.getApiComponent() : RestApiEndpoint.DEFAULT_API_COMPONENT_NAME;
+                    String path = config.getApiContextPath() != null ? config.getApiContextPath() : "api-doc";
+                    restApiEndpoint = camelContext.getEndpoint(String.format("rest-api:%s/%s?componentName=%s&apiComponentName=%s&contextIdPattern=#name#", 
+                        path, camelContext.getName(), componentName, apiComponent));
+                }
+            }
+
+            if (restApiEndpoint != null) {
+                // reuse the producer to avoid creating it
+                try {
+                    apiProducer = restApiEndpoint.createProducer();
+                    camelContext.addService(apiProducer, true);
+                } catch (Exception e) {
+                    throw ObjectHelper.wrapRuntimeCamelException(e);
+                }
+            }
+        }
+
+        if (apiProducer != null) {
+            try {
+                Exchange dummy = apiProducer.getEndpoint().createExchange();
+                apiProducer.process(dummy);
+
+                String json = dummy.hasOut() ? dummy.getOut().getBody(String.class) : dummy.getIn().getBody(String.class);
+                return json;
+            } catch (Exception e) {
+                throw ObjectHelper.wrapRuntimeCamelException(e);
+            }
+        }
+
+        return null;
     }
 
     public CamelContext getCamelContext() {
@@ -94,9 +157,11 @@ public class DefaultRestRegistry extends ServiceSupport implements StaticService
         private final String produces;
         private final String inType;
         private final String outType;
+        private final String routeId;
+        private final String description;
 
-        private RestServiceEntry(Consumer consumer, String url, String baseUrl, String basePath, String uriTemplate,
-                                 String method, String consumes, String produces, String inType, String outType) {
+        private RestServiceEntry(Consumer consumer, String url, String baseUrl, String basePath, String uriTemplate, String method,
+                                 String consumes, String produces, String inType, String outType, String routeId, String description) {
             this.consumer = consumer;
             this.url = url;
             this.baseUrl = baseUrl;
@@ -107,6 +172,8 @@ public class DefaultRestRegistry extends ServiceSupport implements StaticService
             this.produces = produces;
             this.inType = inType;
             this.outType = outType;
+            this.routeId = routeId;
+            this.description = description;
         }
 
         public Consumer getConsumer() {
@@ -160,6 +227,14 @@ public class DefaultRestRegistry extends ServiceSupport implements StaticService
                 status = ServiceStatus.Stopped;
             }
             return status.name();
+        }
+
+        public String getRouteId() {
+            return routeId;
+        }
+
+        public String getDescription() {
+            return description;
         }
     }
 

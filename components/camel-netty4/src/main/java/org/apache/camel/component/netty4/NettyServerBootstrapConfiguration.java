@@ -17,60 +17,96 @@
 package org.apache.camel.component.netty4;
 
 import java.io.File;
-import java.util.Locale;
 import java.util.Map;
 
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
 import io.netty.handler.ssl.SslHandler;
+import org.apache.camel.spi.Metadata;
+import org.apache.camel.spi.UriParam;
+import org.apache.camel.spi.UriParams;
+import org.apache.camel.spi.UriPath;
 import org.apache.camel.util.jsse.SSLContextParameters;
 
+@UriParams
 public class NettyServerBootstrapConfiguration implements Cloneable {
-    private static String defaultEnabledProtocols;
+    public static final String DEFAULT_ENABLED_PROTOCOLS = "TLSv1,TLSv1.1,TLSv1.2";
+
+    @UriPath(enums = "tcp,udp") @Metadata(required = "true")
     protected String protocol;
+    @UriPath @Metadata(required = "true")
     protected String host;
+    @UriPath @Metadata(required = "true")
     protected int port;
+    @UriParam(label = "consumer")
     protected boolean broadcast;
+    @UriParam(label = "advanced", defaultValue = "65536")
     protected int sendBufferSize = 65536;
+    @UriParam(label = "advanced", defaultValue = "65536")
     protected int receiveBufferSize = 65536;
+    @UriParam(label = "advanced")
     protected int receiveBufferSizePredictor;
+    @UriParam(label = "consumer,advanced", defaultValue = "1")
     protected int bossCount = 1;
+    @UriParam(label = "advanced")
     protected int workerCount;
+    @UriParam(defaultValue = "true")
     protected boolean keepAlive = true;
+    @UriParam(defaultValue = "true")
     protected boolean tcpNoDelay = true;
+    @UriParam(defaultValue = "true")
     protected boolean reuseAddress = true;
+    @UriParam(label = "producer", defaultValue = "10000")
     protected int connectTimeout = 10000;
+    @UriParam(label = "consumer,advanced")
     protected int backlog;
+    @UriParam(label = "consumer,advanced")
     protected ServerInitializerFactory serverInitializerFactory;
+    @UriParam(label = "consumer,advanced")
     protected NettyServerBootstrapFactory nettyServerBootstrapFactory;
+    @UriParam(label = "advanced", prefix = "option.", multiValue = true)
     protected Map<String, Object> options;
     // SSL options is also part of the server bootstrap as the server listener on port X is either plain or SSL
+    @UriParam(label = "security")
     protected boolean ssl;
+    @UriParam(label = "security")
     protected boolean sslClientCertHeaders;
+    @UriParam(label = "security")
     protected SslHandler sslHandler;
+    @UriParam(label = "security")
     protected SSLContextParameters sslContextParameters;
+    @UriParam(label = "consumer,security")
     protected boolean needClientAuth;
+    @UriParam(label = "security")
     protected File keyStoreFile;
+    @UriParam(label = "security")
     protected File trustStoreFile;
+    @UriParam(label = "security")
     protected String keyStoreResource;
+    @UriParam(label = "security")
     protected String trustStoreResource;
+    @UriParam(label = "security")
     protected String keyStoreFormat;
+    @UriParam(label = "security")
     protected String securityProvider;
-    protected String enabledProtocols = defaultEnabledProtocols;
+    @UriParam(defaultValue = DEFAULT_ENABLED_PROTOCOLS, label = "security")
+    protected String enabledProtocols = DEFAULT_ENABLED_PROTOCOLS;
+    @UriParam(label = "security", secret = true)
     protected String passphrase;
+    @UriParam(label = "advanced")
+    protected boolean nativeTransport;
+    @UriParam(label = "consumer,advanced")
     protected EventLoopGroup bossGroup;
+    @UriParam(label = "advanced")
     protected EventLoopGroup workerGroup;
+    @UriParam(label = "advanced")
+    protected ChannelGroup channelGroup;
+    @UriParam(label = "consumer,advanced")
     protected String networkInterface;
-    
-    // setup the default value of TLS
-    static {
-        // JDK6 doesn't support TLSv1.1,TLSv1.2
-        String javaVersion = System.getProperty("java.version").toLowerCase(Locale.US);
-        if (javaVersion.startsWith("1.6")) {
-            defaultEnabledProtocols = "TLSv1";
-        } else {
-            defaultEnabledProtocols = "TLSv1,TLSv1.1,TLSv1.2";
-        }
-    }
+    @UriParam(label = "consumer", defaultValue = "true")
+    private boolean reconnect = true;
+    @UriParam(label = "consumer", defaultValue = "10000")
+    private int reconnectInterval = 10000;
 
     public String getAddress() {
         return host + ":" + port;
@@ -84,6 +120,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return protocol;
     }
 
+    /**
+     * The protocol to use which can be tcp or udp.
+     */
     public void setProtocol(String protocol) {
         this.protocol = protocol;
     }
@@ -92,6 +131,12 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return host;
     }
 
+    /**
+     * The hostname.
+     * <p/>
+     * For the consumer the hostname is localhost or 0.0.0.0
+     * For the producer the hostname is the remote host to connect to
+     */
     public void setHost(String host) {
         this.host = host;
     }
@@ -100,6 +145,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return port;
     }
 
+    /**
+     * The host port number
+     */
     public void setPort(int port) {
         this.port = port;
     }
@@ -108,6 +156,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return broadcast;
     }
 
+    /**
+     * Setting to choose Multicast over UDP
+     */
     public void setBroadcast(boolean broadcast) {
         this.broadcast = broadcast;
     }
@@ -116,6 +167,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return sendBufferSize;
     }
 
+    /**
+     * The TCP/UDP buffer sizes to be used during outbound communication. Size is bytes.
+     */
     public void setSendBufferSize(int sendBufferSize) {
         this.sendBufferSize = sendBufferSize;
     }
@@ -124,6 +178,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return receiveBufferSize;
     }
 
+    /**
+     * The TCP/UDP buffer sizes to be used during inbound communication. Size is bytes.
+     */
     public void setReceiveBufferSize(int receiveBufferSize) {
         this.receiveBufferSize = receiveBufferSize;
     }
@@ -132,6 +189,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return receiveBufferSizePredictor;
     }
 
+    /**
+     * Configures the buffer size predictor. See details at Jetty documentation and this mail thread.
+     */
     public void setReceiveBufferSizePredictor(int receiveBufferSizePredictor) {
         this.receiveBufferSizePredictor = receiveBufferSizePredictor;
     }
@@ -140,6 +200,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return workerCount;
     }
 
+    /**
+     * When netty works on nio mode, it uses default workerCount parameter from Netty, which is cpu_core_threads*2.
+     * User can use this operation to override the default workerCount from Netty
+     */
     public void setWorkerCount(int workerCount) {
         this.workerCount = workerCount;
     }
@@ -148,6 +212,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return bossCount;
     }
 
+    /**
+     * When netty works on nio mode, it uses default bossCount parameter from Netty, which is 1.
+     * User can use this operation to override the default bossCount from Netty
+     */
     public void setBossCount(int bossCount) {
         this.bossCount = bossCount;
     }
@@ -156,6 +224,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return keepAlive;
     }
 
+    /**
+     * Setting to ensure socket is not closed due to inactivity
+     */
     public void setKeepAlive(boolean keepAlive) {
         this.keepAlive = keepAlive;
     }
@@ -164,6 +235,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return tcpNoDelay;
     }
 
+    /**
+     * Setting to improve TCP protocol performance
+     */
     public void setTcpNoDelay(boolean tcpNoDelay) {
         this.tcpNoDelay = tcpNoDelay;
     }
@@ -172,6 +246,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return reuseAddress;
     }
 
+    /**
+     * Setting to facilitate socket multiplexing
+     */
     public void setReuseAddress(boolean reuseAddress) {
         this.reuseAddress = reuseAddress;
     }
@@ -180,6 +257,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return connectTimeout;
     }
 
+    /**
+     * Time to wait for a socket connection to be available. Value is in millis.
+     */
     public void setConnectTimeout(int connectTimeout) {
         this.connectTimeout = connectTimeout;
     }
@@ -188,6 +268,12 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return backlog;
     }
 
+    /**
+     * Allows to configure a backlog for netty consumer (server).
+     * Note the backlog is just a best effort depending on the OS.
+     * Setting this option to a value such as 200, 500 or 1000, tells the TCP stack how long the "accept" queue can be
+     * If this option is not configured, then the backlog depends on OS setting.
+     */
     public void setBacklog(int backlog) {
         this.backlog = backlog;
     }
@@ -196,6 +282,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return ssl;
     }
 
+    /**
+     * Setting to specify whether SSL encryption is applied to this endpoint
+     */
     public void setSsl(boolean ssl) {
         this.ssl = ssl;
     }
@@ -204,6 +293,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return sslClientCertHeaders;
     }
 
+    /**
+     * When enabled and in SSL mode, then the Netty consumer will enrich the Camel Message with headers having
+     * information about the client certificate such as subject name, issuer name, serial number, and the valid date range.
+     */
     public void setSslClientCertHeaders(boolean sslClientCertHeaders) {
         this.sslClientCertHeaders = sslClientCertHeaders;
     }
@@ -212,6 +305,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return sslHandler;
     }
 
+    /**
+     * Reference to a class that could be used to return an SSL Handler
+     */
     public void setSslHandler(SslHandler sslHandler) {
         this.sslHandler = sslHandler;
     }
@@ -220,6 +316,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return sslContextParameters;
     }
 
+    /**
+     * To configure security using SSLContextParameters
+     */
     public void setSslContextParameters(SSLContextParameters sslContextParameters) {
         this.sslContextParameters = sslContextParameters;
     }
@@ -228,6 +327,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return needClientAuth;
     }
 
+    /**
+     * Configures whether the server needs client authentication when using SSL.
+     */
     public void setNeedClientAuth(boolean needClientAuth) {
         this.needClientAuth = needClientAuth;
     }
@@ -237,6 +339,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return keyStoreFile;
     }
 
+    /**
+     * Client side certificate keystore to be used for encryption
+     */
     @Deprecated
     public void setKeyStoreFile(File keyStoreFile) {
         this.keyStoreFile = keyStoreFile;
@@ -247,6 +352,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return trustStoreFile;
     }
 
+    /**
+     * Server side certificate keystore to be used for encryption
+     */
     @Deprecated
     public void setTrustStoreFile(File trustStoreFile) {
         this.trustStoreFile = trustStoreFile;
@@ -256,6 +364,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return keyStoreResource;
     }
 
+    /**
+     * Client side certificate keystore to be used for encryption. Is loaded by default from classpath,
+     * but you can prefix with "classpath:", "file:", or "http:" to load the resource from different systems.
+     */
     public void setKeyStoreResource(String keyStoreResource) {
         this.keyStoreResource = keyStoreResource;
     }
@@ -264,6 +376,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return trustStoreResource;
     }
 
+    /**
+     * Server side certificate keystore to be used for encryption.
+     * Is loaded by default from classpath, but you can prefix with "classpath:", "file:", or "http:" to load the resource from different systems.
+     */
     public void setTrustStoreResource(String trustStoreResource) {
         this.trustStoreResource = trustStoreResource;
     }
@@ -272,6 +388,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return keyStoreFormat;
     }
 
+    /**
+     * Keystore format to be used for payload encryption. Defaults to "JKS" if not set
+     */
     public void setKeyStoreFormat(String keyStoreFormat) {
         this.keyStoreFormat = keyStoreFormat;
     }
@@ -280,6 +399,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return securityProvider;
     }
 
+    /**
+     * Security provider to be used for payload encryption. Defaults to "SunX509" if not set.
+     */
     public void setSecurityProvider(String securityProvider) {
         this.securityProvider = securityProvider;
     }
@@ -288,6 +410,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return passphrase;
     }
 
+    /**
+     * Password setting to use in order to encrypt/decrypt payloads sent using SSH
+     */
     public void setPassphrase(String passphrase) {
         this.passphrase = passphrase;
     }
@@ -312,6 +437,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return serverInitializerFactory;
     }
 
+    /**
+     * To use a custom ServerInitializerFactory
+     */
     public void setServerInitializerFactory(ServerInitializerFactory serverInitializerFactory) {
         this.serverInitializerFactory = serverInitializerFactory;
     }
@@ -320,6 +448,9 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return nettyServerBootstrapFactory;
     }
 
+    /**
+     * To use a custom NettyServerBootstrapFactory
+     */
     public void setNettyServerBootstrapFactory(NettyServerBootstrapFactory nettyServerBootstrapFactory) {
         this.nettyServerBootstrapFactory = nettyServerBootstrapFactory;
     }
@@ -328,14 +459,33 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return options;
     }
 
+    /**
+     * Allows to configure additional netty options using "option." as prefix.
+     * For example "option.child.keepAlive=false" to set the netty option "child.keepAlive=false". See the Netty documentation for possible options that can be used.
+     */
     public void setOptions(Map<String, Object> options) {
         this.options = options;
+    }
+
+    public boolean isNativeTransport() {
+        return nativeTransport;
+    }
+
+    /**
+     * Whether to use native transport instead of NIO. Native transport takes advantage of the host operating system and is only supported on some platforms.
+     * You need to add the netty JAR for the host operating system you are using. See more details at: http://netty.io/wiki/native-transports.html
+     */
+    public void setNativeTransport(boolean nativeTransport) {
+        this.nativeTransport = nativeTransport;
     }
 
     public EventLoopGroup getBossGroup() {
         return bossGroup;
     }
 
+    /**
+     * Set the BossGroup which could be used for handling the new connection of the server side across the NettyEndpoint 
+     */
     public void setBossGroup(EventLoopGroup bossGroup) {
         this.bossGroup = bossGroup;
     }
@@ -344,14 +494,32 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return workerGroup;
     }
 
+    /**
+     * To use a explicit EventLoopGroup as the boss thread pool.
+     * For example to share a thread pool with multiple consumers or producers. By default each consumer or producer has their own worker pool with 2 x cpu count core threads.
+     */
     public void setWorkerGroup(EventLoopGroup workerGroup) {
         this.workerGroup = workerGroup;
+    }
+
+    public ChannelGroup getChannelGroup() {
+        return channelGroup;
+    }
+
+    /**
+     * To use a explicit ChannelGroup.
+     */
+    public void setChannelGroup(ChannelGroup channelGroup) {
+        this.channelGroup = channelGroup;
     }
 
     public String getNetworkInterface() {
         return networkInterface;
     }
 
+    /**
+     * When using UDP then this option can be used to specify a network interface by its name, such as eth0 to join a multicast group.
+     */
     public void setNetworkInterface(String networkInterface) {
         this.networkInterface = networkInterface;
     }
@@ -360,8 +528,33 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
         return enabledProtocols;
     }
 
+    /**
+     * Which protocols to enable when using SSL
+     */
     public void setEnabledProtocols(String enabledProtocols) {
         this.enabledProtocols = enabledProtocols;
+    }
+
+    /**
+     * Used only in clientMode in consumer, the consumer will attempt to reconnect on disconnection if this is enabled
+     */
+    public boolean isReconnect() {
+        return reconnect;
+    }
+
+    public void setReconnect(boolean reconnect) {
+        this.reconnect = reconnect;
+    }
+
+    /**
+     * Used if reconnect and clientMode is enabled. The interval in milli seconds to attempt reconnection
+     */
+    public int getReconnectInterval() {
+        return reconnectInterval;
+    }
+
+    public void setReconnectInterval(int reconnectInterval) {
+        this.reconnectInterval = reconnectInterval;
     }
 
     /**
@@ -443,6 +636,10 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
             isCompatible = false;
         } else if (networkInterface != null && !networkInterface.equals(other.networkInterface)) {
             isCompatible = false;
+        } else if (reconnect != other.reconnect) {
+            isCompatible = false;
+        } else if (reconnectInterval != other.reconnectInterval) {
+            isCompatible = false;
         }
 
         return isCompatible;
@@ -482,6 +679,8 @@ public class NettyServerBootstrapConfiguration implements Cloneable {
                 + ", bossGroup=" + bossGroup
                 + ", workerGroup=" + workerGroup
                 + ", networkInterface='" + networkInterface + '\''
+                + ", reconnect='" + reconnect + '\''
+                + ", reconnectInterval='" + reconnectInterval + '\''
                 + '}';
     }
 }

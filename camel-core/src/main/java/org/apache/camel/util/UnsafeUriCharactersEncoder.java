@@ -16,7 +16,11 @@
  */
 package org.apache.camel.util;
 
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Encoder for unsafe URI characters.
@@ -28,6 +32,7 @@ public final class UnsafeUriCharactersEncoder {
     private static BitSet unsafeCharactersHttp;
     private static final char[] HEX_DIGITS = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
                                               'D', 'E', 'F', 'a', 'b', 'c', 'd', 'e', 'f'};
+    private static final Pattern RAW_PATTERN = Pattern.compile("RAW\\([^\\)]+\\)");
 
     static {
         unsafeCharactersRfc1738 = new BitSet(256);
@@ -78,6 +83,63 @@ public final class UnsafeUriCharactersEncoder {
     }
     
     public static String encode(String s, BitSet unsafeCharacters) {
+        return encode(s, unsafeCharacters, false);
+    }
+    
+    public static String encode(String s, boolean checkRaw) {
+        return encode(s, unsafeCharactersRfc1738, checkRaw);
+    }
+    
+    public static String encodeHttpURI(String s, boolean checkRaw) {
+        return encode(s, unsafeCharactersHttp, checkRaw);
+    }
+
+    private static List<Pair> checkRAW(String s) {
+        Matcher matcher = RAW_PATTERN.matcher(s);
+        List<Pair> answer = new ArrayList<Pair>();
+        // Check all occurrences
+        while (matcher.find()) {
+            // TODO: should likely be matcher.end() - 1
+            answer.add(new Pair(matcher.start(), matcher.end()));
+        }
+        return answer;
+    }
+    
+    private static boolean isRaw(int index, List<Pair>pairs) {
+        for (Pair pair : pairs) {
+            if (index < pair.left) {
+                return false;
+            } else {
+                if (index >= pair.left) {
+                    if (index <= pair.right) {
+                        return true;
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
+    private static class Pair {
+        int left;
+        int right;
+        Pair(int left, int right) {
+            this.left = left;
+            this.right = right;
+        }
+    }
+    
+    // Just skip the encode for isRAW part
+    public static String encode(String s, BitSet unsafeCharacters, boolean checkRaw) {
+        List<Pair> rawPairs;
+        if (checkRaw) {
+            rawPairs = checkRAW(s); 
+        } else {
+            rawPairs = new ArrayList<Pair>();
+        }
+   
         int n = s == null ? 0 : s.length();
         if (n == 0) {
             return s;
@@ -108,7 +170,7 @@ public final class UnsafeUriCharactersEncoder {
                     char next = i + 1 < chars.length ? chars[i + 1] : ' ';
                     char next2 = i + 2 < chars.length ? chars[i + 2] : ' ';
 
-                    if (isHexDigit(next) && isHexDigit(next2)) {
+                    if (isHexDigit(next) && isHexDigit(next2) && !isRaw(i, rawPairs)) {
                         // its already encoded (decimal encoded) so just append as is
                         sb.append(ch);
                     } else {

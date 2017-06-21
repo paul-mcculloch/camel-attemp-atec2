@@ -18,7 +18,6 @@ package org.apache.camel.builder.xml;
 
 import java.io.File;
 import java.io.InputStream;
-import java.io.StringReader;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +50,6 @@ import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.Predicate;
 import org.apache.camel.RuntimeExpressionException;
 import org.apache.camel.WrappedFile;
-import org.apache.camel.component.bean.BeanInvocation;
 import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.spi.Language;
 import org.apache.camel.spi.NamespaceAware;
@@ -87,6 +85,7 @@ import static org.apache.camel.builder.xml.Namespaces.isMatchingNamespaceOrEmpty
 public class XPathBuilder extends ServiceSupport implements Expression, Predicate, NamespaceAware {
     private static final Logger LOG = LoggerFactory.getLogger(XPathBuilder.class);
     private static final String SAXON_OBJECT_MODEL_URI = "http://saxon.sf.net/jaxp/xpath/om";
+    private static final String SAXON_FACTORY_CLASS_NAME = "net.sf.saxon.xpath.XPathFactoryImpl";
     private static final String OBTAIN_ALL_NS_XPATH = "//*/namespace::*";
 
     private static volatile XPathFactory defaultXPathFactory;
@@ -106,6 +105,7 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
     private volatile Class<?> resultType;
     private volatile QName resultQName = XPathConstants.NODESET;
     private volatile String objectModelUri;
+    private volatile String factoryClassName;
     private volatile DefaultNamespaceContext namespaceContext;
     private volatile boolean logNamespaces;
     private volatile XPathFunctionResolver functionResolver;
@@ -196,6 +196,13 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
 
     /**
      * Evaluates the given xpath using the provided body.
+     * <p/>
+     * The evaluation uses by default {@link javax.xml.xpath.XPathConstants#NODESET} as the type
+     * used during xpath evaluation. The output from xpath is then afterwards type converted
+     * using Camel's type converter to the given type.
+     * <p/>
+     * If you want to evaluate xpath using a different type, then call {@link #setResultType(Class)}
+     * prior to calling this evaluate method.
      *
      * @param context the camel context
      * @param body    the body
@@ -232,6 +239,7 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
         dummy.getIn().setBody(body);
 
         setResultQName(XPathConstants.STRING);
+        setResultType(String.class);
         try {
             return evaluate(dummy, String.class);
         } finally {
@@ -316,6 +324,18 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
         return this;
     }
 
+
+    /**
+     * Sets the factory class name to use
+     *
+     * @return the current builder
+     */
+    public XPathBuilder factoryClassName(String factoryClassName) {
+        this.factoryClassName = factoryClassName;
+        return this;
+    }
+
+
     /**
      * Configures to use Saxon as the XPathFactory which allows you to use XPath 2.0 functions
      * which may not be part of the build in JDK XPath parser.
@@ -324,6 +344,7 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
      */
     public XPathBuilder saxon() {
         this.objectModelUri = SAXON_OBJECT_MODEL_URI;
+        this.factoryClassName = SAXON_FACTORY_CLASS_NAME;
         return this;
     }
 
@@ -501,6 +522,10 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
     public void setNamespaces(Map<String, String> namespaces) {
         this.namespaces.clear();
         this.namespaces.putAll(namespaces);
+    }
+
+    public Map<String, String> getNamespaces() {
+        return namespaces;
     }
 
     /**
@@ -721,20 +746,30 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
         return logNamespaces;
     }
 
-    public String getObjectModelUri() {
-        return objectModelUri;
-    }
-
     /**
      * Enables Saxon on this particular XPath expression, as {@link #saxon()} sets the default static XPathFactory which may have already been initialised
      * by previous XPath expressions
      */
     public void enableSaxon() {
         this.setObjectModelUri(SAXON_OBJECT_MODEL_URI);
+        this.setFactoryClassName(SAXON_FACTORY_CLASS_NAME);
+
+    }
+
+    public String getObjectModelUri() {
+        return objectModelUri;
     }
 
     public void setObjectModelUri(String objectModelUri) {
         this.objectModelUri = objectModelUri;
+    }
+
+    public String getFactoryClassName() {
+        return factoryClassName;
+    }
+
+    public void setFactoryClassName(String factoryClassName) {
+        this.factoryClassName = factoryClassName;
     }
 
     // Implementation methods
@@ -1113,25 +1148,6 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
             }
         }
 
-        // okay we can try to remedy the failed conversion by some special types
-        if (answer == null) {
-            // let's try coercing some common types into something JAXP work with the best for special types
-            if (body instanceof WrappedFile) {
-                // special for files so we can work with them out of the box
-                InputStream is = exchange.getContext().getTypeConverter().convertTo(InputStream.class, exchange, body);
-                answer = new InputSource(is);
-            } else if (body instanceof BeanInvocation) {
-                // if its a null bean invocation then handle that specially
-                BeanInvocation bi = exchange.getContext().getTypeConverter().convertTo(BeanInvocation.class, exchange, body);
-                if (bi.getArgs() != null && bi.getArgs().length == 1 && bi.getArgs()[0] == null) {
-                    // its a null argument from the bean invocation so use null as answer
-                    answer = null;
-                }
-            } else if (body instanceof String) {
-                answer = new InputSource(new StringReader((String) body));
-            }
-        }
-
         if (type == null && answer == null) {
             // fallback to get the body as is
             answer = body;
@@ -1192,7 +1208,15 @@ public class XPathBuilder extends ServiceSupport implements Expression, Predicat
 
     protected synchronized XPathFactory createXPathFactory() throws XPathFactoryConfigurationException {
         if (objectModelUri != null) {
-            xpathFactory = XPathFactory.newInstance(objectModelUri);
+            String xpathFactoryClassName = factoryClassName;
+            if (objectModelUri.equals(SAXON_OBJECT_MODEL_URI) && ObjectHelper.isEmpty(xpathFactoryClassName)) {
+                xpathFactoryClassName = SAXON_FACTORY_CLASS_NAME;
+            }
+
+            xpathFactory = ObjectHelper.isEmpty(xpathFactoryClassName)
+                ? XPathFactory.newInstance(objectModelUri)
+                : XPathFactory.newInstance(objectModelUri, xpathFactoryClassName, null);
+
             LOG.info("Using objectModelUri " + objectModelUri + " when created XPathFactory {}", xpathFactory);
             return xpathFactory;
         }

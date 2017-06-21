@@ -27,6 +27,7 @@ import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.api.management.mbean.ManagedResourceEndpointMBean;
 import org.apache.camel.converter.IOConverter;
 import org.apache.camel.impl.ProcessorEndpoint;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriPath;
 import org.apache.camel.util.IOHelper;
@@ -42,7 +43,14 @@ import org.slf4j.LoggerFactory;
 public abstract class ResourceEndpoint extends ProcessorEndpoint implements ManagedResourceEndpointMBean {
     protected final Logger log = LoggerFactory.getLogger(getClass());
     private volatile byte[] buffer;
-    @UriPath(description = "Path to the resource")
+
+    @UriPath(description = "Path to the resource."
+        + " You can prefix with: classpath, file, http, ref, or bean."
+        + " classpath, file and http loads the resource using these protocols (classpath is default)."
+        + " ref will lookup the resource in the registry."
+        + " bean will call a method on a bean to be used as the resource."
+        + " For bean you can specify the method name after dot, eg bean:myBean.myMethod.")
+    @Metadata(required = "true")
     private String resourceUri;
     @UriParam(defaultValue = "false", description = "Sets whether to use resource content cache or not")
     private boolean contentCache;
@@ -95,7 +103,7 @@ public abstract class ResourceEndpoint extends ProcessorEndpoint implements Mana
      * @throws IOException is thrown if resource is not found or cannot be loaded
      */
     protected InputStream loadResource(String uri) throws IOException {
-        return ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext().getClassResolver(), uri);
+        return ResourceHelper.resolveMandatoryResourceAsInputStream(getCamelContext(), uri);
     }
 
     @ManagedAttribute(description = "Whether the resource is cached")
@@ -140,7 +148,13 @@ public abstract class ResourceEndpoint extends ProcessorEndpoint implements Mana
     }
 
     /**
-     * Path to the resource
+     * Path to the resource.
+     * <p/>
+     * You can prefix with: classpath, file, http, ref, or bean.
+     * classpath, file and http loads the resource using these protocols (classpath is default).
+     * ref will lookup the resource in the registry.
+     * bean will call a method on a bean to be used as the resource.
+     * For bean you can specify the method name after dot, eg bean:myBean.myMethod
      *
      * @param resourceUri  the resource path
      */

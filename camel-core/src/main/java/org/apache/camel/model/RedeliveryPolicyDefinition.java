@@ -24,14 +24,16 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.camel.CamelContext;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.processor.RedeliveryPolicy;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.ObjectHelper;
 
 /**
- * Represents an XML &lt;redeliveryPolicy/&gt; element
+ * To configure re-delivery for error handling
  *
  * @version 
  */
+@Metadata(label = "configuration")
 @XmlRootElement(name = "redeliveryPolicy")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RedeliveryPolicyDefinition {
@@ -64,11 +66,15 @@ public class RedeliveryPolicyDefinition {
     @XmlAttribute
     private String logHandled;
     @XmlAttribute
+    private String logNewException;
+    @XmlAttribute
     private String logContinued;
     @XmlAttribute
     private String logExhausted;
     @XmlAttribute
     private String logExhaustedMessageHistory;
+    @XmlAttribute
+    private String logExhaustedMessageBody;
     @XmlAttribute
     private String disableRedelivery;
     @XmlAttribute
@@ -131,6 +137,9 @@ public class RedeliveryPolicyDefinition {
             if (logHandled != null) {
                 answer.setLogHandled(CamelContextHelper.parseBoolean(context, logHandled));
             }
+            if (logNewException != null) {
+                answer.setLogNewException(CamelContextHelper.parseBoolean(context, logNewException));
+            }
             if (logContinued != null) {
                 answer.setLogContinued(CamelContextHelper.parseBoolean(context, logContinued));
             }
@@ -143,19 +152,22 @@ public class RedeliveryPolicyDefinition {
             if (logExhaustedMessageHistory != null) {
                 answer.setLogExhaustedMessageHistory(CamelContextHelper.parseBoolean(context, logExhaustedMessageHistory));
             }
+            if (logExhaustedMessageBody != null) {
+                answer.setLogExhaustedMessageBody(CamelContextHelper.parseBoolean(context, logExhaustedMessageBody));
+            }
             if (disableRedelivery != null) {
                 if (CamelContextHelper.parseBoolean(context, disableRedelivery)) {
                     answer.setMaximumRedeliveries(0);
                 }
             }
             if (delayPattern != null) {
-                answer.setDelayPattern(delayPattern);
+                answer.setDelayPattern(CamelContextHelper.parseText(context, delayPattern));
             }
             if (allowRedeliveryWhileStopping != null) {
                 answer.setAllowRedeliveryWhileStopping(CamelContextHelper.parseBoolean(context, allowRedeliveryWhileStopping));
             }
             if (exchangeFormatterRef != null) {
-                answer.setExchangeFormatterRef(exchangeFormatterRef);
+                answer.setExchangeFormatterRef(CamelContextHelper.parseText(context, exchangeFormatterRef));
             }
         } catch (Exception e) {
             throw ObjectHelper.wrapRuntimeCamelException(e);
@@ -173,7 +185,8 @@ public class RedeliveryPolicyDefinition {
     //-------------------------------------------------------------------------
 
     /**
-     * Allow synchronous delayed redelivery.
+     * Allow synchronous delayed redelivery. The route, in particular the consumer's component,
+     * must support the Asynchronous Routing Engine (e.g. seda).
      *
      * @return the builder
      */
@@ -392,6 +405,33 @@ public class RedeliveryPolicyDefinition {
     }
 
     /**
+     * Sets whether new exceptions should be logged or not.
+     * Can be used to include or reduce verbose.
+     * <p/>
+     * A new exception is an exception that was thrown while handling a previous exception.
+     *
+     * @param logNewException  whether new exceptions should be logged or not
+     * @return the builder
+     */
+    public RedeliveryPolicyDefinition logNewException(boolean logNewException) {
+        return logNewException(Boolean.toString(logNewException));
+    }
+
+    /**
+     * Sets whether new exceptions should be logged or not (supports property placeholders).
+     * Can be used to include or reduce verbose.
+     * <p/>
+     * A new exception is an exception that was thrown while handling a previous exception.
+     *
+     * @param logNewException  whether new exceptions should be logged or not
+     * @return the builder
+     */
+    public RedeliveryPolicyDefinition logNewException(String logNewException) {
+        setLogNewException(logNewException);
+        return this;
+    }
+
+    /**
      * Sets whether continued exceptions should be logged or not.
      * Can be used to include or reduce verbose.
      *
@@ -458,6 +498,30 @@ public class RedeliveryPolicyDefinition {
      */
     public RedeliveryPolicyDefinition logExhaustedMessageHistory(String logExhaustedMessageHistory) {
         setLogExhaustedMessageHistory(logExhaustedMessageHistory);
+        return this;
+    }
+
+    /**
+     * Sets whether exhausted message body should be logged including message history or not (supports property placeholders).
+     * Can be used to include or reduce verbose. Requires <tt>logExhaustedMessageHistory</tt> to be enabled.
+     *
+     * @param logExhaustedMessageBody  whether exhausted message body should be logged with message history
+     * @return the builder
+     */
+    public RedeliveryPolicyDefinition logExhaustedMessageBody(boolean logExhaustedMessageBody) {
+        setLogExhaustedMessageBody(Boolean.toString(logExhaustedMessageBody));
+        return this;
+    }
+
+    /**
+     * Sets whether exhausted message body should be logged including message history or not (supports property placeholders).
+     * Can be used to include or reduce verbose. Requires <tt>logExhaustedMessageHistory</tt> to be enabled.
+     *
+     * @param logExhaustedMessageBody  whether exhausted message body should be logged with message history
+     * @return the builder
+     */
+    public RedeliveryPolicyDefinition logExhaustedMessageBody(String logExhaustedMessageBody) {
+        setLogExhaustedMessageBody(logExhaustedMessageBody);
         return this;
     }
 
@@ -547,7 +611,7 @@ public class RedeliveryPolicyDefinition {
     /**
      * Sets the reference of the instance of {@link org.apache.camel.spi.ExchangeFormatter} to generate the log message from exchange.
      *
-     * @param reference name of the instance of {@link org.apache.camel.spi.ExchangeFormatter}
+     * @param exchangeFormatterRef name of the instance of {@link org.apache.camel.spi.ExchangeFormatter}
      * @return the builder
      */
     public RedeliveryPolicyDefinition exchangeFormatterRef(String exchangeFormatterRef) {
@@ -682,6 +746,14 @@ public class RedeliveryPolicyDefinition {
         this.logHandled = logHandled;
     }
 
+    public String getLogNewException() {
+        return logNewException;
+    }
+
+    public void setLogNewException(String logNewException) {
+        this.logNewException = logNewException;
+    }
+
     public String getLogContinued() {
         return logContinued;
     }
@@ -706,10 +778,21 @@ public class RedeliveryPolicyDefinition {
         this.logExhaustedMessageHistory = logExhaustedMessageHistory;
     }
 
+    public String getLogExhaustedMessageBody() {
+        return logExhaustedMessageBody;
+    }
+
+    public void setLogExhaustedMessageBody(String logExhaustedMessageBody) {
+        this.logExhaustedMessageBody = logExhaustedMessageBody;
+    }
+
     public String getDisableRedelivery() {
         return disableRedelivery;
     }
 
+    /**
+     * Disables redelivery (same as setting maximum redeliveries to 0)
+     */
     public void setDisableRedelivery(String disableRedelivery) {
         this.disableRedelivery = disableRedelivery;
     }

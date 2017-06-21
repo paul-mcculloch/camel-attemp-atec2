@@ -21,37 +21,29 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import com.mongodb.Mongo;
-
 import org.apache.camel.Endpoint;
-import org.apache.camel.impl.DefaultComponent;
-import org.apache.camel.util.CamelContextHelper;
-
+import org.apache.camel.impl.UriEndpointComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Represents the component that manages {@link MongoDbEndpoint}.
  */
-public class MongoDbComponent extends DefaultComponent {
+public class MongoDbComponent extends UriEndpointComponent {
     
     public static final Set<MongoDbOperation> WRITE_OPERATIONS = 
             new HashSet<MongoDbOperation>(Arrays.asList(MongoDbOperation.insert, MongoDbOperation.save, 
                     MongoDbOperation.update, MongoDbOperation.remove));
     private static final Logger LOG = LoggerFactory.getLogger(MongoDbComponent.class);
-    private volatile Mongo db;
 
-    /**
-     * Should access a singleton of type Mongo
-     */
+    public MongoDbComponent() {
+        super(MongoDbEndpoint.class);
+    }
+
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        if (db == null) {
-            db = CamelContextHelper.mandatoryLookup(getCamelContext(), remaining, Mongo.class);
-            LOG.debug("Resolved the connection with the name {} as {}", remaining, db);
-        }
 
-        Endpoint endpoint = new MongoDbEndpoint(uri, this);
-        parameters.put("mongoConnection", db);
+        MongoDbEndpoint endpoint = new MongoDbEndpoint(uri, this);
+        endpoint.setConnectionBean(remaining);
         setProperties(endpoint, parameters);
         
         return endpoint;
@@ -59,12 +51,6 @@ public class MongoDbComponent extends DefaultComponent {
 
     @Override
     protected void doShutdown() throws Exception {
-        if (db != null) {
-            // properly close the underlying physical connection to MongoDB
-            LOG.debug("Closing the connection {} on {}", db, this);
-            db.close();
-        }
-
         super.doShutdown();
     }
 
@@ -75,6 +61,5 @@ public class MongoDbComponent extends DefaultComponent {
             return new CamelMongoDbException(t);
         }
     }
-    
-    
+
 }

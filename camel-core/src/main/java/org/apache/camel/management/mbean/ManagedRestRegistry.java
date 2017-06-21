@@ -24,6 +24,7 @@ import javax.management.openmbean.TabularData;
 import javax.management.openmbean.TabularDataSupport;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.Producer;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.api.management.mbean.CamelOpenMBeanTypes;
 import org.apache.camel.api.management.mbean.ManagedRestRegistryMBean;
@@ -37,6 +38,7 @@ import org.apache.camel.util.ObjectHelper;
 public class ManagedRestRegistry extends ManagedService implements ManagedRestRegistryMBean {
 
     private final RestRegistry registry;
+    private transient Producer apiProducer;
 
     public ManagedRestRegistry(CamelContext context, RestRegistry registry) {
         super(context, registry);
@@ -69,10 +71,12 @@ public class ManagedRestRegistry extends ManagedService implements ManagedRestRe
                 String state = entry.getState();
                 String inType = entry.getInType();
                 String outType = entry.getOutType();
+                String routeId = entry.getRouteId();
+                String description = entry.getDescription();
 
                 CompositeData data = new CompositeDataSupport(ct, new String[]
-                {"url", "baseUrl", "basePath", "uriTemplate", "method", "consumes", "produces", "inType", "outType", "state"},
-                        new Object[]{url, baseUrl, basePath, uriTemplate, method, consumes, produces, inType, outType, state});
+                {"url", "baseUrl", "basePath", "uriTemplate", "method", "consumes", "produces", "inType", "outType", "state", "routeId", "description"},
+                        new Object[]{url, baseUrl, basePath, uriTemplate, method, consumes, produces, inType, outType, state, routeId, description});
                 answer.put(data);
             }
             return answer;
@@ -80,4 +84,10 @@ public class ManagedRestRegistry extends ManagedService implements ManagedRestRe
             throw ObjectHelper.wrapRuntimeCamelException(e);
         }
     }
+
+    @Override
+    public String apiDocAsJson() {
+        return registry.apiDocAsJson();
+    }
+
 }

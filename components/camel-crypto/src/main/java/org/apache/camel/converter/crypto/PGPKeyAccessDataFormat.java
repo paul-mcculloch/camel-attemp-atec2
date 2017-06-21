@@ -17,7 +17,6 @@
 package org.apache.camel.converter.crypto;
 
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -31,12 +30,12 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.camel.Exchange;
-import org.apache.camel.converter.stream.CachedOutputStream;
+import org.apache.camel.converter.stream.OutputStreamBuilder;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.DataFormatName;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.IOHelper;
-import org.apache.camel.util.ObjectHelper;
 import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.bcpg.CompressionAlgorithmTags;
 import org.bouncycastle.bcpg.HashAlgorithmTags;
@@ -60,6 +59,7 @@ import org.bouncycastle.openpgp.PGPSignatureGenerator;
 import org.bouncycastle.openpgp.PGPSignatureList;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.PGPUtil;
+import org.bouncycastle.openpgp.operator.bc.BcKeyFingerprintCalculator;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentSignerBuilder;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProvider;
 import org.bouncycastle.openpgp.operator.jcajce.JcePGPDataEncryptorBuilder;
@@ -78,7 +78,7 @@ import org.slf4j.LoggerFactory;
  * array or file, then you should use the class {@link PGPDataFormat}.
  * 
  */
-public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat {
+public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat, DataFormatName {
 
     public static final String KEY_USERID = "CamelPGPDataFormatKeyUserid";
     public static final String KEY_USERIDS = "CamelPGPDataFormatKeyUserids";
@@ -158,15 +158,29 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
     private boolean armored; // for encryption
     private boolean integrity = true; // for encryption
 
-    private int hashAlgorithm = HashAlgorithmTags.SHA1; // for encryption
+    private int hashAlgorithm = HashAlgorithmTags.SHA1; // for signature
 
     private int algorithm = SymmetricKeyAlgorithmTags.CAST5; // for encryption
 
     private int compressionAlgorithm = CompressionAlgorithmTags.ZIP; // for encryption
+    
+    private boolean withCompressedDataPacket = true; // for encryption
 
     private String signatureVerificationOption = "optional";
 
+    /*
+     * The default value "_CONSOLE" marks the file as For Your Eyes Only... may
+     * cause problems for the receiver if they use an automated process to
+     * decrypt as the filename is appended with _CONSOLE
+     */
+    private String fileName = PGPLiteralData.CONSOLE;
+
     public PGPKeyAccessDataFormat() {
+    }
+
+    @Override
+    public String getDataFormatName() {
+        return "pgp";
     }
 
     protected String findKeyUserid(Exchange exchange) {
@@ -199,7 +213,11 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         return exchange.getIn().getHeader(SIGNATURE_HASH_ALGORITHM, getHashAlgorithm(), Integer.class);
     }
 
-    public void marshal(Exchange exchange, Object graph, OutputStream outputStream) throws Exception {
+    protected String findFileName(Exchange exchange) {
+        return exchange.getIn().getHeader(Exchange.FILE_NAME, getFileName(), String.class);
+    }
+
+    public void marshal(Exchange exchange, Object graph, OutputStream outputStream) throws Exception { //NOPMD
         List<String> userids = determineEncryptionUserIds(exchange);
         List<PGPPublicKey> keys = publicKeyAccessor.getEncryptionKeys(exchange, userids);
         if (keys.isEmpty()) {
@@ -222,18 +240,19 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         }
         OutputStream encOut = encGen.open(outputStream, new byte[BUFFER_SIZE]);
 
-        PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(findCompressionAlgorithm(exchange));
-        OutputStream comOut = new BufferedOutputStream(comData.open(encOut));
-
+        OutputStream comOut;
+        if (withCompressedDataPacket) {
+            PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(findCompressionAlgorithm(exchange));
+            comOut = new BufferedOutputStream(comData.open(encOut));
+        } else {
+            comOut = encOut;
+            LOG.debug("No Compressed Data packet is added");  
+        }
+            
         List<PGPSignatureGenerator> sigGens = createSignatureGenerator(exchange, comOut);
 
         PGPLiteralDataGenerator litData = new PGPLiteralDataGenerator();
-        String fileName = exchange.getIn().getHeader(Exchange.FILE_NAME, String.class);
-        if (ObjectHelper.isEmpty(fileName)) {
-            // This marks the file as For Your Eyes Only... may cause problems for the receiver if they use
-            // an automated process to decrypt as the filename is appended with _CONSOLE
-            fileName = PGPLiteralData.CONSOLE;
-        }
+        String fileName = findFileName(exchange);
         OutputStream litOut = litData.open(comOut, PGPLiteralData.BINARY, fileName, new Date(), new byte[BUFFER_SIZE]);
 
         try {
@@ -305,7 +324,7 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         return result;
     }
 
-    protected List<PGPSignatureGenerator> createSignatureGenerator(Exchange exchange, OutputStream out) throws Exception {
+    protected List<PGPSignatureGenerator> createSignatureGenerator(Exchange exchange, OutputStream out) throws Exception { //NOPMD
 
         if (secretKeyAccessor == null) {
             return null;
@@ -338,8 +357,7 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         return sigGens;
     }
 
-    @SuppressWarnings("resource")
-    public Object unmarshal(Exchange exchange, InputStream encryptedStream) throws Exception {
+    public Object unmarshal(Exchange exchange, InputStream encryptedStream) throws Exception { //NOPMD
         if (encryptedStream == null) {
             return null;
         }
@@ -347,18 +365,22 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         InputStream encData = null;
         InputStream uncompressedData = null;
         InputStream litData = null;
-
-        CachedOutputStream cos;
-        ByteArrayOutputStream bos;
-        OutputStream os = null;
+        OutputStreamBuilder osb = null;
 
         try {
             in = PGPUtil.getDecoderStream(encryptedStream);
-            encData = getDecryptedData(exchange, in);
-            uncompressedData = getUncompressedData(encData);
-            PGPObjectFactory pgpFactory = new PGPObjectFactory(uncompressedData);
+            DecryptedDataAndPPublicKeyEncryptedData encDataAndPbe = getDecryptedData(exchange, in);
+            encData = encDataAndPbe.getDecryptedData();
+            PGPObjectFactory pgpFactory = new PGPObjectFactory(encData, new BcKeyFingerprintCalculator());
             Object object = pgpFactory.nextObject();
-
+            if (object instanceof PGPCompressedData) {
+                PGPCompressedData comData = (PGPCompressedData) object;
+                uncompressedData = comData.getDataStream();
+                pgpFactory = new PGPObjectFactory(uncompressedData, new BcKeyFingerprintCalculator());
+                object = pgpFactory.nextObject();
+            } else {
+                LOG.debug("PGP Message does not contain a Compressed Data Packet");
+            }
             PGPOnePassSignature signature;
             if (object instanceof PGPOnePassSignatureList) {
                 signature = getSignature(exchange, (PGPOnePassSignatureList) object);
@@ -379,52 +401,33 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
                 throw getFormatException();
             }
             litData = ld.getInputStream();
-
-            // enable streaming via OutputStreamCache
-            if (exchange.getContext().getStreamCachingStrategy().isEnabled()) {
-                cos = new CachedOutputStream(exchange);
-                bos = null;
-                os = cos;
-            } else {
-                cos = null;
-                bos = new ByteArrayOutputStream();
-                os = bos;
-            }
+            osb = OutputStreamBuilder.withExchange(exchange);
 
             byte[] buffer = new byte[BUFFER_SIZE];
             int bytesRead;
             while ((bytesRead = litData.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
+                osb.write(buffer, 0, bytesRead);
                 if (signature != null) {
                     signature.update(buffer, 0, bytesRead);
                 }
-                os.flush();
+                osb.flush();
             }
             verifySignature(pgpFactory, signature);
+            PGPPublicKeyEncryptedData pbe = encDataAndPbe.getPbe();
+            if (pbe.isIntegrityProtected()) {
+                if (!pbe.verify()) {
+                    throw new PGPException("Message failed integrity check");
+                }
+            }
         } finally {
-            IOHelper.close(os, litData, uncompressedData, encData, in, encryptedStream);
+            IOHelper.close(osb, litData, uncompressedData, encData, in, encryptedStream);
         }
 
-        if (cos != null) {
-            return cos.newStreamCache();
-        } else {
-            return bos.toByteArray();
-        }
+        return osb.build();
     }
 
-    private InputStream getUncompressedData(InputStream encData) throws IOException, PGPException {
-        PGPObjectFactory pgpFactory = new PGPObjectFactory(encData);
-        Object compObj = pgpFactory.nextObject();
-        if (!(compObj instanceof PGPCompressedData)) {
-            throw getFormatException();
-        }
-        PGPCompressedData comData = (PGPCompressedData) compObj;
-        InputStream uncompressedData = comData.getDataStream();
-        return uncompressedData;
-    }
-
-    private InputStream getDecryptedData(Exchange exchange, InputStream encryptedStream) throws Exception, PGPException {
-        PGPObjectFactory pgpFactory = new PGPObjectFactory(encryptedStream);
+    private DecryptedDataAndPPublicKeyEncryptedData getDecryptedData(Exchange exchange, InputStream encryptedStream) throws Exception, PGPException {
+        PGPObjectFactory pgpFactory = new PGPObjectFactory(encryptedStream, new BcKeyFingerprintCalculator());
         Object firstObject = pgpFactory.nextObject();
         // the first object might be a PGP marker packet 
         PGPEncryptedDataList enc = getEcryptedDataList(pgpFactory, firstObject);
@@ -452,7 +455,7 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         }
 
         InputStream encData = pbe.getDataStream(new JcePublicKeyDataDecryptorFactoryBuilder().setProvider(getProvider()).build(key));
-        return encData;
+        return new DecryptedDataAndPPublicKeyEncryptedData(encData, pbe);
     }
 
     private PGPEncryptedDataList getEcryptedDataList(PGPObjectFactory pgpFactory, Object firstObject) throws IOException {
@@ -483,7 +486,7 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         return new IllegalArgumentException(
                 "The input message body has an invalid format. The PGP decryption/verification processor expects a sequence of PGP packets of the form "
                         + "(entries in brackets are optional and ellipses indicate repetition, comma represents  sequential composition, and vertical bar separates alternatives): "
-                        + "Public Key Encrypted Session Key ..., Symmetrically Encrypted Data | Sym. Encrypted and Integrity Protected Data, Compressed Data, (One Pass Signature ...,) "
+                        + "Public Key Encrypted Session Key ..., Symmetrically Encrypted Data | Sym. Encrypted and Integrity Protected Data, (Compressed Data,) (One Pass Signature ...,) "
                         + "Literal Data, (Signature ...,)");
     }
 
@@ -703,6 +706,18 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         return signatureVerificationOption;
     }
 
+    public boolean isWithCompressedDataPacket() {
+        return withCompressedDataPacket;
+    }
+
+    /** Indicator that Compressed Data packet shall be added during encryption.
+     * The default value is true.
+     * If <tt>false</tt> then the compression algorithm (see {@link #setCompressionAlgorithm(int)} is ignored. 
+     */
+    public void setWithCompressedDataPacket(boolean withCompressedDataPacket) {
+        this.withCompressedDataPacket = withCompressedDataPacket;
+    }
+
     /**
      * Signature verification option. Controls the behavior for the signature
      * verification during unmarshaling. Possible values are
@@ -714,8 +729,8 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
      * 
      * @param signatureVerificationOption
      *            signature verification option
-     * @throws IllegalArgument
-     *             exception if an invalid value is entered
+     * @throws IllegalArgumentException
+     *            if an invalid value is entered
      */
     public void setSignatureVerificationOption(String signatureVerificationOption) {
         if (SIGNATURE_VERIFICATION_OPTIONS.contains(signatureVerificationOption)) {
@@ -725,8 +740,38 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
         }
     }
 
+    /**
+     * Returns the file name for the literal packet. Cannot be <code>null</code>
+     * .
+     * 
+     */
+    public String getFileName() {
+        return fileName;
+    }
+
+    /**
+     * Sets the file name for the literal data packet. Can be overwritten by the
+     * header {@link Exchange#FILE_NAME}. The default value is "_CONSOLE".
+     * "_CONSOLE" indicates that the message is considered to be
+     * "for your eyes only". This advises that the message data is unusually
+     * sensitive, and the receiving program should process it more carefully,
+     * perhaps avoiding storing the received data to disk, for example.
+     * <p>
+     * Only used for marshaling.
+     * 
+     * @param fileName
+     * @throws IllegalArgumentException
+     *             if <tt>fileName</tt> is <code>null</code>
+     */
+    public void setFileName(String fileName) {
+        if (fileName == null) {
+            throw new IllegalArgumentException("Parameter 'fileName' is null");
+        }
+        this.fileName = fileName;
+    }
+
     @Override
-    protected void doStart() throws Exception {
+    protected void doStart() throws Exception { //NOPMD
         if (Security.getProvider(BC) == null && BC.equals(getProvider())) {
             LOG.debug("Adding BouncyCastleProvider as security provider");
             Security.addProvider(new BouncyCastleProvider());
@@ -736,7 +781,28 @@ public class PGPKeyAccessDataFormat extends ServiceSupport implements DataFormat
     }
 
     @Override
-    protected void doStop() throws Exception {
+    protected void doStop() throws Exception { //NOPMD
         // noop
+    }
+    
+    private static class DecryptedDataAndPPublicKeyEncryptedData {
+
+        private final InputStream decryptedData;
+
+        private final PGPPublicKeyEncryptedData pbe;
+
+        DecryptedDataAndPPublicKeyEncryptedData(InputStream decryptedData, PGPPublicKeyEncryptedData pbe) {
+            this.decryptedData = decryptedData;
+            this.pbe = pbe;
+        }
+
+        public InputStream getDecryptedData() {
+            return decryptedData;
+        }
+
+        public PGPPublicKeyEncryptedData getPbe() {
+            return pbe;
+        }
+
     }
 }

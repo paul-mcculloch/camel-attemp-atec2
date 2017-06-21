@@ -17,11 +17,13 @@
 package org.apache.camel.commands;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.camel.CamelContext;
 
-public class DummyCamelController extends AbstractCamelController {
+public class DummyCamelController extends AbstractLocalCamelController {
 
     private CamelContext camelContext;
 
@@ -30,9 +32,20 @@ public class DummyCamelController extends AbstractCamelController {
     }
 
     @Override
-    public List<CamelContext> getCamelContexts() {
+    public List<CamelContext> getLocalCamelContexts() {
         List<CamelContext> answer = new ArrayList<CamelContext>(1);
         answer.add(camelContext);
+        return answer;
+    }
+
+    @Override
+    public List<Map<String, String>> getCamelContexts() throws Exception {
+        List<Map<String, String>> answer = new ArrayList<Map<String, String>>(1);
+        Map<String, String> row = new LinkedHashMap<String, String>();
+        row.put("name", camelContext.getName());
+        row.put("state", camelContext.getStatus().name());
+        row.put("uptime", camelContext.getUptime());
+        answer.add(row);
         return answer;
     }
 }

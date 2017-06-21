@@ -19,27 +19,31 @@ package org.apache.camel.component.twitter;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
-import org.apache.camel.component.direct.DirectEndpoint;
-import org.apache.camel.component.twitter.consumer.Twitter4JConsumer;
+import org.apache.camel.component.twitter.consumer.AbstractTwitterConsumerHandler;
 import org.apache.camel.component.twitter.consumer.TwitterConsumerEvent;
 import org.apache.camel.component.twitter.data.EndpointType;
-import org.apache.camel.spi.UriEndpoint;
-import org.apache.camel.spi.UriParam;
+import org.apache.camel.impl.DefaultEndpoint;
 
-@UriEndpoint(scheme = "twitter", consumerClass = Twitter4JConsumer.class)
-public class TwitterEndpointEvent extends DirectEndpoint implements TwitterEndpoint {
+@Deprecated
+public class TwitterEndpointEvent extends DefaultEndpoint implements CommonPropertiesTwitterEndpoint {
+    private final String kind;
 
-    @UriParam
+    // only TwitterEndpointPolling is annotated
     private TwitterConfiguration properties;
 
-    public TwitterEndpointEvent(String uri, TwitterComponent component, TwitterConfiguration properties) {
+    private String user;
+
+    private String keywords;
+
+    public TwitterEndpointEvent(String uri, String remaining, TwitterComponent component, TwitterConfiguration properties) {
         super(uri, component);
+        this.kind = remaining;
         this.properties = properties;
     }
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        Twitter4JConsumer twitter4jConsumer = Twitter4JFactory.getConsumer(this, getEndpointUri());
+        AbstractTwitterConsumerHandler twitter4jConsumer = TwitterHelper.createConsumer(this, getEndpointUri(), kind);
         return new TwitterConsumerEvent(this, processor, twitter4jConsumer);
     }
 
@@ -62,11 +66,36 @@ public class TwitterEndpointEvent extends DirectEndpoint implements TwitterEndpo
     }
 
     @Override
+    public boolean isSingleton() {
+        return true;
+    }
+
+    @Override
     protected void doStop() throws Exception {
         super.doStop();
         if (properties.getTwitterStream() != null) {
             properties.getTwitterStream().shutdown();
         }
+    }
+
+    @Override
+    public String getUser() {
+        return user;
+    }
+
+    @Override
+    public void setUser(String user) {
+        this.user = user;
+    }
+
+    @Override
+    public String getKeywords() {
+        return keywords;
+    }
+
+    @Override
+    public void setKeywords(String keywords) {
+        this.keywords = keywords;
     }
 
 }

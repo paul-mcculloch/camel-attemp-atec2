@@ -28,6 +28,8 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.impl.UriEndpointComponent;
 
 /**
+ * The <a href="http://camel.apache.org/timer.html">Timer Component</a> is for generating message exchanges when a timer fires.
+ *
  * Represents the component that manages {@link TimerEndpoint}.  It holds the
  * list of {@link TimerConsumer} objects that are started.
  *
@@ -93,8 +95,8 @@ public class TimerComponent extends UriEndpointComponent {
         TimerEndpoint answer = new TimerEndpoint(uri, this, remaining);
 
         // convert time from String to a java.util.Date using the supported patterns
-        String time = getAndRemoveParameter(parameters, "time", String.class);
-        String pattern = getAndRemoveParameter(parameters, "pattern", String.class);
+        String time = getAndRemoveOrResolveReferenceParameter(parameters, "time", String.class);
+        String pattern = getAndRemoveOrResolveReferenceParameter(parameters, "pattern", String.class);
         if (time != null) {
             SimpleDateFormat sdf;
             if (pattern != null) {
@@ -106,6 +108,7 @@ public class TimerComponent extends UriEndpointComponent {
             }
             Date date = sdf.parse(time);
             answer.setTime(date);
+            answer.setPattern(pattern);
         }
 
         setProperties(answer, parameters);

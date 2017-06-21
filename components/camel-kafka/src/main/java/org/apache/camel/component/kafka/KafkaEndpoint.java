@@ -16,50 +16,59 @@
  */
 package org.apache.camel.component.kafka;
 
-import java.net.URISyntaxException;
+import java.lang.reflect.Field;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 
-import kafka.message.MessageAndMetadata;
 import org.apache.camel.Consumer;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.impl.DefaultEndpoint;
-import org.apache.camel.impl.DefaultExchange;
-import org.apache.camel.impl.DefaultMessage;
+import org.apache.camel.impl.SynchronousDelegateProducer;
+import org.apache.camel.spi.ClassResolver;
+import org.apache.camel.spi.UriEndpoint;
+import org.apache.camel.spi.UriParam;
+import org.apache.camel.util.CastUtils;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.Partitioner;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.Deserializer;
+import org.apache.kafka.common.serialization.Serializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- *
+ * The kafka component allows messages to be sent to (or consumed from) Apache Kafka brokers.
  */
-public class KafkaEndpoint extends DefaultEndpoint {
+@UriEndpoint(firstVersion = "2.13.0", scheme = "kafka", title = "Kafka", syntax = "kafka:topic", consumerClass = KafkaConsumer.class, label = "messaging")
+public class KafkaEndpoint extends DefaultEndpoint implements MultipleConsumersSupport {
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaEndpoint.class);
 
-    private String brokers;
+    @UriParam
     private KafkaConfiguration configuration = new KafkaConfiguration();
 
     public KafkaEndpoint() {
     }
 
-    public KafkaEndpoint(String endpointUri,
-                         String remaining,
-                         KafkaComponent component) throws URISyntaxException {
+    public KafkaEndpoint(String endpointUri, KafkaComponent component) {
         super(endpointUri, component);
-        this.brokers = remaining.split("\\?")[0];
+    }
+
+    @Override
+    public KafkaComponent getComponent() {
+        return (KafkaComponent) super.getComponent();
     }
 
     public KafkaConfiguration getConfiguration() {
-        if (configuration == null) {
-            configuration = createConfiguration();
-        }
         return configuration;
     }
 
     public void setConfiguration(KafkaConfiguration configuration) {
         this.configuration = configuration;
-    }
-
-    protected KafkaConfiguration createConfiguration() {
-        return new KafkaConfiguration();
     }
 
     @Override
@@ -71,7 +80,12 @@ public class KafkaEndpoint extends DefaultEndpoint {
 
     @Override
     public Producer createProducer() throws Exception {
-        return new KafkaProducer(this);
+        KafkaProducer producer = createProducer(this);
+        if (isSynchronous()) {
+            return new SynchronousDelegateProducer(producer);
+        } else {
+            return producer;
+        }
     }
 
     @Override
@@ -79,351 +93,94 @@ public class KafkaEndpoint extends DefaultEndpoint {
         return true;
     }
 
-    public ExecutorService createExecutor() {
-        return getCamelContext().getExecutorServiceManager().newFixedThreadPool(this, "KafkaTopic[" + configuration.getTopic() + "]", configuration.getConsumerStreams());
+    @Override
+    public boolean isMultipleConsumersSupported() {
+        return true;
     }
 
-    public Exchange createKafkaExchange(MessageAndMetadata<byte[], byte[]> mm) {
-        Exchange exchange = new DefaultExchange(getCamelContext(), getExchangePattern());
+    private void loadParitionerClass(ClassResolver resolver, Properties props) {
+        replaceWithClass(props, "partitioner.class", resolver, Partitioner.class);
+    }
 
-        Message message = new DefaultMessage();
-        message.setHeader(KafkaConstants.PARTITION, mm.partition());
-        message.setHeader(KafkaConstants.TOPIC, mm.topic());
-        if (mm.key() != null) {
-            message.setHeader(KafkaConstants.KEY, new String(mm.key()));
+    <T> Class<T> loadClass(Object o, ClassResolver resolver, Class<T> type) {
+        if (o == null || o instanceof Class) {
+            return CastUtils.cast((Class<?>) o);
         }
-        message.setBody(mm.message());
-        exchange.setIn(message);
+        String name = o.toString();
+        Class<T> c = resolver.resolveClass(name, type);
+        if (c == null) {
+            c = resolver.resolveClass(name, type, getClass().getClassLoader());
+        }
+        if (c == null) {
+            c = resolver.resolveClass(name, type, org.apache.kafka.clients.producer.KafkaProducer.class.getClassLoader());
+        }
+        return c;
+    }
+
+    void replaceWithClass(Properties props, String key, ClassResolver resolver, Class<?> type) {
+        Class<?> c = loadClass(props.get(key), resolver, type);
+        if (c != null) {
+            props.put(key, c);
+        }
+    }
+
+    public void updateClassProperties(Properties props) {
+        try {
+            if (getCamelContext() != null) {
+                ClassResolver resolver = getCamelContext().getClassResolver();
+                replaceWithClass(props, ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, resolver, Serializer.class);
+                replaceWithClass(props, ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, resolver, Serializer.class);
+                replaceWithClass(props, ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, resolver, Deserializer.class);
+                replaceWithClass(props, ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, resolver, Deserializer.class);
+
+                try {
+                    //doesn't exist in old version of Kafka client so detect and only call the method if
+                    //the field/config actually exists
+                    Field f = ProducerConfig.class.getDeclaredField("PARTITIONER_CLASS_CONFIG");
+                    if (f != null) {
+                        loadParitionerClass(resolver, props);
+                    }
+                } catch (NoSuchFieldException e) {
+                    //ignore
+                } catch (SecurityException e) {
+                    //ignore
+                }
+                //doesn't work as it needs to be List<String>  :(
+                //replaceWithClass(props, "partition.assignment.strategy", resolver, PartitionAssignor.class);
+            }
+        } catch (Throwable t) {
+            //can ignore and Kafka itself might be able to handle it, if not, it will throw an exception
+            LOG.debug("Problem loading classes for Serializers", t);
+        }
+    }
+
+    public ExecutorService createExecutor() {
+        return getCamelContext().getExecutorServiceManager().newFixedThreadPool(this, "KafkaConsumer[" + configuration.getTopic() + "]", configuration.getConsumerStreams());
+    }
+
+    public ExecutorService createProducerExecutor() {
+        int core = getConfiguration().getWorkerPoolCoreSize();
+        int max = getConfiguration().getWorkerPoolMaxSize();
+        return getCamelContext().getExecutorServiceManager().newThreadPool(this, "KafkaProducer[" + configuration.getTopic() + "]", core, max);
+    }
+
+    public Exchange createKafkaExchange(ConsumerRecord record) {
+        Exchange exchange = super.createExchange();
+
+        Message message = exchange.getIn();
+        message.setHeader(KafkaConstants.PARTITION, record.partition());
+        message.setHeader(KafkaConstants.TOPIC, record.topic());
+        message.setHeader(KafkaConstants.OFFSET, record.offset());
+        if (record.key() != null) {
+            message.setHeader(KafkaConstants.KEY, record.key());
+        }
+        message.setBody(record.value());
 
         return exchange;
     }
 
-
-    // Delegated properties from the configuration
-    //-------------------------------------------------------------------------
-
-    public String getZookeeperConnect() {
-        return configuration.getZookeeperConnect();
-    }
-
-    public void setZookeeperConnect(String zookeeperConnect) {
-        configuration.setZookeeperConnect(zookeeperConnect);
-    }
-
-    public String getZookeeperHost() {
-        return configuration.getZookeeperHost();
-    }
-
-    public void setZookeeperHost(String zookeeperHost) {
-        configuration.setZookeeperHost(zookeeperHost);
-    }
-
-    public int getZookeeperPort() {
-        return configuration.getZookeeperPort();
-    }
-
-    public void setZookeeperPort(int zookeeperPort) {
-        configuration.setZookeeperPort(zookeeperPort);
-    }
-
-    public String getGroupId() {
-        return configuration.getGroupId();
-    }
-
-    public void setGroupId(String groupId) {
-        configuration.setGroupId(groupId);
-    }
-
-    public String getPartitioner() {
-        return configuration.getPartitioner();
-    }
-
-    public void setPartitioner(String partitioner) {
-        configuration.setPartitioner(partitioner);
-    }
-
-    public String getTopic() {
-        return configuration.getTopic();
-    }
-
-    public void setTopic(String topic) {
-        configuration.setTopic(topic);
-    }
-
-    public String getBrokers() {
-        return brokers;
-    }
-
-    public int getConsumerStreams() {
-        return configuration.getConsumerStreams();
-    }
-
-    public void setConsumerStreams(int consumerStreams) {
-        configuration.setConsumerStreams(consumerStreams);
-    }
-
-    public void setConsumerTimeoutMs(int consumerTimeoutMs) {
-        configuration.setConsumerTimeoutMs(consumerTimeoutMs);
-    }
-
-    public void setSerializerClass(String serializerClass) {
-        configuration.setSerializerClass(serializerClass);
-    }
-
-    public void setQueueBufferingMaxMessages(int queueBufferingMaxMessages) {
-        configuration.setQueueBufferingMaxMessages(queueBufferingMaxMessages);
-    }
-
-    public int getFetchWaitMaxMs() {
-        return configuration.getFetchWaitMaxMs();
-    }
-
-    public Integer getZookeeperConnectionTimeoutMs() {
-        return configuration.getZookeeperConnectionTimeoutMs();
-    }
-
-    public void setZookeeperConnectionTimeoutMs(Integer zookeeperConnectionTimeoutMs) {
-        configuration.setZookeeperConnectionTimeoutMs(zookeeperConnectionTimeoutMs);
-    }
-
-    public void setMessageSendMaxRetries(int messageSendMaxRetries) {
-        configuration.setMessageSendMaxRetries(messageSendMaxRetries);
-    }
-
-    public int getQueueBufferingMaxMs() {
-        return configuration.getQueueBufferingMaxMs();
-    }
-
-    public void setRequestRequiredAcks(short requestRequiredAcks) {
-        configuration.setRequestRequiredAcks(requestRequiredAcks);
-    }
-
-    public Integer getRebalanceBackoffMs() {
-        return configuration.getRebalanceBackoffMs();
-    }
-
-    public void setQueueEnqueueTimeoutMs(int queueEnqueueTimeoutMs) {
-        configuration.setQueueEnqueueTimeoutMs(queueEnqueueTimeoutMs);
-    }
-
-    public int getFetchMessageMaxBytes() {
-        return configuration.getFetchMessageMaxBytes();
-    }
-
-    public int getQueuedMaxMessages() {
-        return configuration.getQueuedMaxMessages();
-    }
-
-    public int getAutoCommitIntervalMs() {
-        return configuration.getAutoCommitIntervalMs();
-    }
-
-    public void setSocketTimeoutMs(int socketTimeoutMs) {
-        configuration.setSocketTimeoutMs(socketTimeoutMs);
-    }
-
-    public void setAutoCommitIntervalMs(int autoCommitIntervalMs) {
-        configuration.setAutoCommitIntervalMs(autoCommitIntervalMs);
-    }
-
-    public void setRequestTimeoutMs(int requestTimeoutMs) {
-        configuration.setRequestTimeoutMs(requestTimeoutMs);
-    }
-
-    public void setCompressedTopics(String compressedTopics) {
-        configuration.setCompressedTopics(compressedTopics);
-    }
-
-    public int getSocketReceiveBufferBytes() {
-        return configuration.getSocketReceiveBufferBytes();
-    }
-
-    public void setSendBufferBytes(int sendBufferBytes) {
-        configuration.setSendBufferBytes(sendBufferBytes);
-    }
-
-    public void setFetchMessageMaxBytes(int fetchMessageMaxBytes) {
-        configuration.setFetchMessageMaxBytes(fetchMessageMaxBytes);
-    }
-
-    public int getRefreshLeaderBackoffMs() {
-        return configuration.getRefreshLeaderBackoffMs();
-    }
-
-    public void setFetchWaitMaxMs(int fetchWaitMaxMs) {
-        configuration.setFetchWaitMaxMs(fetchWaitMaxMs);
-    }
-
-    public int getTopicMetadataRefreshIntervalMs() {
-        return configuration.getTopicMetadataRefreshIntervalMs();
-    }
-
-    public void setZookeeperSessionTimeoutMs(int zookeeperSessionTimeoutMs) {
-        configuration.setZookeeperSessionTimeoutMs(zookeeperSessionTimeoutMs);
-    }
-
-    public int getConsumerTimeoutMs() {
-        return configuration.getConsumerTimeoutMs();
-    }
-
-    public void setAutoCommitEnable(boolean autoCommitEnable) {
-        configuration.setAutoCommitEnable(autoCommitEnable);
-    }
-
-    public String getCompressionCodec() {
-        return configuration.getCompressionCodec();
-    }
-
-    public void setProducerType(String producerType) {
-        configuration.setProducerType(producerType);
-    }
-
-    public String getClientId() {
-        return configuration.getClientId();
-    }
-
-    public int getFetchMinBytes() {
-        return configuration.getFetchMinBytes();
-    }
-
-    public String getAutoOffsetReset() {
-        return configuration.getAutoOffsetReset();
-    }
-
-    public void setRefreshLeaderBackoffMs(int refreshLeaderBackoffMs) {
-        configuration.setRefreshLeaderBackoffMs(refreshLeaderBackoffMs);
-    }
-
-    public void setAutoOffsetReset(String autoOffsetReset) {
-        configuration.setAutoOffsetReset(autoOffsetReset);
-    }
-
-    public void setConsumerId(String consumerId) {
-        configuration.setConsumerId(consumerId);
-    }
-
-    public int getRetryBackoffMs() {
-        return configuration.getRetryBackoffMs();
-    }
-
-    public int getRebalanceMaxRetries() {
-        return configuration.getRebalanceMaxRetries();
-    }
-
-    public boolean isAutoCommitEnable() {
-        return configuration.isAutoCommitEnable();
-    }
-
-    public void setQueueBufferingMaxMs(int queueBufferingMaxMs) {
-        configuration.setQueueBufferingMaxMs(queueBufferingMaxMs);
-    }
-
-    public void setRebalanceMaxRetries(int rebalanceMaxRetries) {
-        configuration.setRebalanceMaxRetries(rebalanceMaxRetries);
-    }
-
-    public int getZookeeperSessionTimeoutMs() {
-        return configuration.getZookeeperSessionTimeoutMs();
-    }
-
-    public void setKeySerializerClass(String keySerializerClass) {
-        configuration.setKeySerializerClass(keySerializerClass);
-    }
-
-    public void setCompressionCodec(String compressionCodec) {
-        configuration.setCompressionCodec(compressionCodec);
-    }
-
-    public void setClientId(String clientId) {
-        configuration.setClientId(clientId);
-    }
-
-    public int getSocketTimeoutMs() {
-        return configuration.getSocketTimeoutMs();
-    }
-
-    public String getCompressedTopics() {
-        return configuration.getCompressedTopics();
-    }
-
-    public int getZookeeperSyncTimeMs() {
-        return configuration.getZookeeperSyncTimeMs();
-    }
-
-    public void setSocketReceiveBufferBytes(int socketReceiveBufferBytes) {
-        configuration.setSocketReceiveBufferBytes(socketReceiveBufferBytes);
-    }
-
-    public int getQueueEnqueueTimeoutMs() {
-        return configuration.getQueueEnqueueTimeoutMs();
-    }
-
-    public int getQueueBufferingMaxMessages() {
-        return configuration.getQueueBufferingMaxMessages();
-    }
-
-    public void setZookeeperSyncTimeMs(int zookeeperSyncTimeMs) {
-        configuration.setZookeeperSyncTimeMs(zookeeperSyncTimeMs);
-    }
-
-    public String getKeySerializerClass() {
-        return configuration.getKeySerializerClass();
-    }
-
-    public void setTopicMetadataRefreshIntervalMs(int topicMetadataRefreshIntervalMs) {
-        configuration.setTopicMetadataRefreshIntervalMs(topicMetadataRefreshIntervalMs);
-    }
-
-    public void setBatchNumMessages(int batchNumMessages) {
-        configuration.setBatchNumMessages(batchNumMessages);
-    }
-
-    public int getSendBufferBytes() {
-        return configuration.getSendBufferBytes();
-    }
-
-    public void setRebalanceBackoffMs(Integer rebalanceBackoffMs) {
-        configuration.setRebalanceBackoffMs(rebalanceBackoffMs);
-    }
-
-    public void setQueuedMaxMessages(int queuedMaxMessages) {
-        configuration.setQueuedMaxMessages(queuedMaxMessages);
-    }
-
-    public void setRetryBackoffMs(int retryBackoffMs) {
-        configuration.setRetryBackoffMs(retryBackoffMs);
-    }
-
-    public int getBatchNumMessages() {
-        return configuration.getBatchNumMessages();
-    }
-
-    public short getRequestRequiredAcks() {
-        return configuration.getRequestRequiredAcks();
-    }
-
-    public String getProducerType() {
-        return configuration.getProducerType();
-    }
-
-    public String getConsumerId() {
-        return configuration.getConsumerId();
-    }
-
-    public int getMessageSendMaxRetries() {
-        return configuration.getMessageSendMaxRetries();
-    }
-
-    public void setFetchMinBytes(int fetchMinBytes) {
-        configuration.setFetchMinBytes(fetchMinBytes);
-    }
-
-    public String getSerializerClass() {
-        return configuration.getSerializerClass();
-    }
-
-    public int getRequestTimeoutMs() {
-        return configuration.getRequestTimeoutMs();
+    protected KafkaProducer createProducer(KafkaEndpoint endpoint) {
+        return new KafkaProducer(endpoint);
     }
 
 }

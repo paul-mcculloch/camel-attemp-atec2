@@ -85,7 +85,8 @@ public enum HdfsFileType {
                     return bytesRead;
                 } else {
                     key.value = null;
-                    value.value = null;
+                    // indication that we may have read from empty file
+                    value.value = bos;
                     return 0;
                 }
             } catch (IOException ex) {
@@ -499,7 +500,6 @@ public enum HdfsFileType {
 
     public static long copyBytes(InputStream in, OutputStream out, int buffSize, boolean close) throws IOException {
         long numBytes = 0;
-        @SuppressWarnings("resource")
         PrintStream ps = out instanceof PrintStream ? (PrintStream) out : null;
         byte buf[] = new byte[buffSize];
         try {

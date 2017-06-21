@@ -28,6 +28,7 @@ import org.apache.camel.Message;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.Traceable;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.IdAware;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.AsyncProcessorHelper;
 import org.apache.camel.util.IOHelper;
@@ -40,7 +41,8 @@ import org.apache.camel.util.ServiceHelper;
  *
  * @version 
  */
-public class UnmarshalProcessor extends ServiceSupport implements AsyncProcessor, Traceable, CamelContextAware {
+public class UnmarshalProcessor extends ServiceSupport implements AsyncProcessor, Traceable, CamelContextAware, IdAware {
+    private String id;
     private CamelContext camelContext;
     private final DataFormat dataFormat;
 
@@ -76,7 +78,7 @@ public class UnmarshalProcessor extends ServiceSupport implements AsyncProcessor
             } else {
                 out.setBody(result);
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // remove OUT message, as an exception occurred
             exchange.setOut(null);
             exchange.setException(e);
@@ -98,6 +100,14 @@ public class UnmarshalProcessor extends ServiceSupport implements AsyncProcessor
         return "unmarshal[" + dataFormat + "]";
     }
 
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
     public CamelContext getCamelContext() {
         return camelContext;
     }
@@ -112,12 +122,15 @@ public class UnmarshalProcessor extends ServiceSupport implements AsyncProcessor
         if (dataFormat instanceof CamelContextAware) {
             ((CamelContextAware) dataFormat).setCamelContext(camelContext);
         }
-        ServiceHelper.startService(dataFormat);
+        // add dataFormat as service which will also start the service
+        // (false => we handle the lifecycle of the dataFormat)
+        getCamelContext().addService(dataFormat, false, true);
     }
 
     @Override
     protected void doStop() throws Exception {
         ServiceHelper.stopService(dataFormat);
+        getCamelContext().removeService(dataFormat);
     }
 
 }

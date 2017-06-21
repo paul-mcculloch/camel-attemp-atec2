@@ -85,8 +85,8 @@ public class HttpServerPipelineFactory extends ServerPipelineFactory {
             LOG.debug("Server SSL handler configured and added as an interceptor against the ChannelPipeline: {}", sslHandler);
             pipeline.addLast("ssl", sslHandler);
         }
-        
-        pipeline.addLast("decoder", new HttpRequestDecoder());
+
+        pipeline.addLast("decoder", new HttpRequestDecoder(4096, configuration.getMaxHeaderSize(), 8192));
         List<ChannelHandler> decoders = consumer.getConfiguration().getDecoders();
         for (int x = 0; x < decoders.size(); x++) {
             ChannelHandler decoder = decoders.get(x);
@@ -138,7 +138,7 @@ public class HttpServerPipelineFactory extends ServerPipelineFactory {
 
         // create ssl context once
         if (configuration.getSslContextParameters() != null) {
-            answer = configuration.getSslContextParameters().createSSLContext();
+            answer = configuration.getSslContextParameters().createSSLContext(camelContext);
         } else {
             if (configuration.getKeyStoreFile() == null && configuration.getKeyStoreResource() == null) {
                 LOG.debug("keystorefile is null");

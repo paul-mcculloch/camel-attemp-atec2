@@ -32,16 +32,16 @@ public class VersionCmdHeaderTest extends BaseDockerHeaderTest<VersionCmd> {
 
     @Mock
     private VersionCmd mockObject;
-    
+
     @Test
     public void pingHeaderTest() {
-                
+
         Map<String, Object> headers = getDefaultParameters();
-        
+
         template.sendBodyAndHeaders("direct:in", "", headers);
-        
+
         Mockito.verify(dockerClient, Mockito.times(1)).versionCmd();
-        
+
     }
 
     @Override

@@ -34,7 +34,7 @@ public final class SyslogConverter {
 
     private static final Logger LOG = LoggerFactory.getLogger(SyslogConverter.class);
 
-    private static enum MONTHS {
+    private enum MONTHS {
         jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec
     }
 
@@ -228,7 +228,14 @@ public final class SyslogConverter {
             rfc5424SyslogMessage.setMsgId(msgId.toString());
 
             StringBuilder structuredData = new StringBuilder();
-            while ((charFound = (char) (byteBuffer.get() & 0xff)) != ' ') {
+            boolean inblock = false;
+            while (((charFound = (char) (byteBuffer.get() & 0xff)) != ' ') || inblock) {
+                if (charFound == '[') {
+                    inblock = true;
+                } 
+                if (charFound == ']') {
+                    inblock = false;
+                }
                 structuredData.append(charFound);
             }
             rfc5424SyslogMessage.setStructuredData(structuredData.toString());

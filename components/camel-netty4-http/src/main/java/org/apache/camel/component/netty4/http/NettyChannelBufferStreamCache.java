@@ -21,12 +21,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 import io.netty.buffer.ByteBuf;
+import org.apache.camel.Exchange;
 import org.apache.camel.StreamCache;
 import org.apache.camel.util.IOHelper;
 
-
 /**
- * A {@link ChannelBuffer} which is exposed as an {@link InputStream} which makes it very
+ * A {@link ByteBuf} which is exposed as an {@link InputStream} which makes it very
  * easy to use by Camel and other Camel components. Also supported is {@link StreamCache}
  * which allows the data to be re-read for example when doing content based routing with XPath.
  */
@@ -35,8 +35,9 @@ public final class NettyChannelBufferStreamCache extends InputStream implements 
     private final ByteBuf buffer;
 
     public NettyChannelBufferStreamCache(ByteBuf buffer) {
-        this.buffer = buffer;
-        buffer.markReaderIndex();
+        // retain the buffer so we keep it in use until we release it when we are done
+        this.buffer = buffer.retain();
+        this.buffer.markReaderIndex();
     }
 
     @Override
@@ -88,6 +89,11 @@ public final class NettyChannelBufferStreamCache extends InputStream implements 
     }
 
     @Override
+    public StreamCache copy(Exchange exchange) throws IOException {
+        return new NettyChannelBufferStreamCache(buffer.copy());
+    }
+
+    @Override
     public boolean inMemory() {
         return true;
     }
@@ -96,4 +102,12 @@ public final class NettyChannelBufferStreamCache extends InputStream implements 
     public long length() {
         return buffer.readableBytes();
     }
+
+    /**
+     * Release the buffer when we are done using it.
+     */
+    public void release() {
+        buffer.release();
+    }
+
 }

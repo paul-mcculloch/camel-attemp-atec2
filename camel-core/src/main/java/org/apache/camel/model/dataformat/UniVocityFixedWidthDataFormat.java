@@ -23,11 +23,12 @@ import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.spi.DataFormat;
-
+import org.apache.camel.spi.Metadata;
 
 /**
- * Represents the uniVocity fixed-width {@link org.apache.camel.spi.DataFormat}
+ * UniVocity fixed-width data format
  */
+@Metadata(firstVersion = "2.15.0", label = "dataformat,transformation,csv", title = "uniVocity Fixed Length")
 @XmlRootElement(name = "univocity-fixed")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UniVocityFixedWidthDataFormat extends UniVocityAbstractDataFormat {
@@ -35,7 +36,7 @@ public class UniVocityFixedWidthDataFormat extends UniVocityAbstractDataFormat {
     protected Boolean skipTrailingCharsUntilNewline;
     @XmlAttribute
     protected Boolean recordEndsOnNewline;
-    @XmlAttribute
+    @XmlAttribute @Metadata(defaultValue = " ")
     protected String padding;
 
     public UniVocityFixedWidthDataFormat() {
@@ -46,6 +47,11 @@ public class UniVocityFixedWidthDataFormat extends UniVocityAbstractDataFormat {
         return skipTrailingCharsUntilNewline;
     }
 
+    /**
+     * Whether or not the trailing characters until new line must be ignored.
+     * <p/>
+     * The default value is false
+     */
     public void setSkipTrailingCharsUntilNewline(Boolean skipTrailingCharsUntilNewline) {
         this.skipTrailingCharsUntilNewline = skipTrailingCharsUntilNewline;
     }
@@ -54,6 +60,11 @@ public class UniVocityFixedWidthDataFormat extends UniVocityAbstractDataFormat {
         return recordEndsOnNewline;
     }
 
+    /**
+     * Whether or not the record ends on new line.
+     * <p/>
+     * The default value is false
+     */
     public void setRecordEndsOnNewline(Boolean recordEndsOnNewline) {
         this.recordEndsOnNewline = recordEndsOnNewline;
     }
@@ -62,6 +73,11 @@ public class UniVocityFixedWidthDataFormat extends UniVocityAbstractDataFormat {
         return padding;
     }
 
+    /**
+     * The padding character.
+     * <p/>
+     * The default value is a space
+     */
     public void setPadding(String padding) {
         this.padding = padding;
     }
