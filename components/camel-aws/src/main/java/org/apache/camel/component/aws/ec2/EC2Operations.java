@@ -18,9 +18,7 @@ package org.apache.camel.component.aws.ec2;
 
 public enum EC2Operations {
 
-<<<<<<< HEAD
-    DescribeInstances;
-=======
+    DescribeInstances,
     createAndRunInstances,
     startInstances,
     stopInstances,
@@ -32,5 +30,4 @@ public enum EC2Operations {
     unmonitorInstances,
     createTags,
     deleteTags
->>>>>>> upstream/master
 }

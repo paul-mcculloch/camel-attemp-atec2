@@ -16,18 +16,6 @@
  */
 package org.apache.camel.component.aws.ec2;
 
-<<<<<<< HEAD
-import org.apache.camel.Endpoint;
-import org.apache.camel.Exchange;
-import org.apache.camel.impl.DefaultProducer;
-import org.apache.camel.util.URISupport;
-
-/**
- * A Producer which sends messages to the Amazon EC2 Service
- */
-public class EC2Producer extends DefaultProducer {
-    
-=======
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -78,18 +66,15 @@ public class EC2Producer extends DefaultProducer {
     
     private transient String ec2ProducerToString;
 
->>>>>>> upstream/master
     public EC2Producer(Endpoint endpoint) {
         super(endpoint);
     }
 
     public void process(Exchange exchange) throws Exception {
         switch (determineOperation(exchange)) {
-<<<<<<< HEAD
         case DescribeInstances:
-            new DescribeInstancesCommand(getEndpoint().getEC2Client(), getConfiguration(), exchange).execute();
+            new DescribeInstancesCommand(getEndpoint().getEc2Client(), getConfiguration(), exchange).execute();
             break;
-=======
         case createAndRunInstances:
             createAndRunInstance(getEndpoint().getEc2Client(), exchange);
             break;
@@ -123,7 +108,6 @@ public class EC2Producer extends DefaultProducer {
         case deleteTags:
             deleteTags(getEndpoint().getEc2Client(), exchange);
             break; 
->>>>>>> upstream/master
         default:
             throw new IllegalArgumentException("Unsupported operation");
         }
@@ -143,22 +127,16 @@ public class EC2Producer extends DefaultProducer {
 
     @Override
     public String toString() {
-<<<<<<< HEAD
-        return "EC2Producer[" + URISupport.sanitizeUri(getEndpoint().getEndpointUri()) + "]";
-=======
         if (ec2ProducerToString == null) {
             ec2ProducerToString = "EC2Producer[" + URISupport.sanitizeUri(getEndpoint().getEndpointUri()) + "]";
         }
         return ec2ProducerToString;
->>>>>>> upstream/master
     }
 
     @Override
     public EC2Endpoint getEndpoint() {
         return (EC2Endpoint) super.getEndpoint();
     }
-<<<<<<< HEAD
-=======
     
     private void createAndRunInstance(AmazonEC2Client ec2Client, Exchange exchange) {
         String ami;
@@ -446,5 +424,4 @@ public class EC2Producer extends DefaultProducer {
         Message message = getMessageForResponse(exchange);
         message.setBody(result); 
     }
->>>>>>> upstream/master
 }

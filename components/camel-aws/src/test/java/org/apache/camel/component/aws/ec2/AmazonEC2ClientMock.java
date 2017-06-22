@@ -16,21 +16,11 @@
  */
 package org.apache.camel.component.aws.ec2;
 
-<<<<<<< HEAD
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.Reservation;
-
-public class AmazonEC2ClientMock extends AmazonEC2Client {   
-=======
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 
+import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.ec2.AmazonEC2Client;
@@ -71,13 +61,11 @@ import com.amazonaws.services.ec2.model.UnmonitorInstancesResult;
 import org.apache.camel.util.ObjectHelper;
 
 public class AmazonEC2ClientMock extends AmazonEC2Client {
->>>>>>> upstream/master
 
     public AmazonEC2ClientMock() {
         super(new BasicAWSCredentials("user", "secret"));
     }
     
-<<<<<<< HEAD
     
     @Override
     public DescribeInstancesResult describeInstances() throws AmazonServiceException, AmazonClientException {
@@ -90,7 +78,6 @@ public class AmazonEC2ClientMock extends AmazonEC2Client {
 
 
 
-=======
     @Override
     public RunInstancesResult runInstances(RunInstancesRequest runInstancesRequest) {
         RunInstancesResult result = new RunInstancesResult();
@@ -338,5 +325,4 @@ public class AmazonEC2ClientMock extends AmazonEC2Client {
     public DeleteTagsResult deleteTags(DeleteTagsRequest deleteTagsRequest) {
         return new DeleteTagsResult();
     }
->>>>>>> upstream/master
 }

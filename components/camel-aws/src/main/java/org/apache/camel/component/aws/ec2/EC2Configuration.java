@@ -18,50 +18,6 @@ package org.apache.camel.component.aws.ec2;
 
 import com.amazonaws.services.ec2.AmazonEC2Client;
 
-<<<<<<< HEAD
-/**
- * The AWS EC2 component configuration properties
- * 
- */
-public class EC2Configuration {
-    private String accessKey;
-    private String secretKey;
-    private AmazonEC2Client amazonEC2Client;
-    private String amazonEC2Endpoint;
-    private EC2Operations operation;
-  
-    public String getAccessKey() {
-        return accessKey;
-    }
-    public void setAccessKey(String accessKey) {
-        this.accessKey = accessKey;
-    }
-    public String getSecretKey() {
-        return secretKey;
-    }
-    public void setSecretKey(String secretKey) {
-        this.secretKey = secretKey;
-    }
-    public AmazonEC2Client getAmazonEC2Client() {
-        return amazonEC2Client;
-    }
-    public void setAmazonEC2Client(AmazonEC2Client amazonEC2Client) {
-        this.amazonEC2Client = amazonEC2Client;
-    }
-    public String getAmazonEC2Endpoint() {
-        return amazonEC2Endpoint;
-    }
-    public void setAmazonEC2Endpoint(String amazonEC2Endpoint) {
-        this.amazonEC2Endpoint = amazonEC2Endpoint;
-    }
-    public EC2Operations getOperation() {
-        return operation;
-    }
-    public void setOperation(EC2Operations operation) {
-        this.operation = operation;
-    }
-
-=======
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
@@ -166,5 +122,4 @@ public class EC2Configuration {
     public void setProxyPort(Integer proxyPort) {
         this.proxyPort = proxyPort;
     }
->>>>>>> upstream/master
 }

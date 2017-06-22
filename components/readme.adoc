@@ -2,7 +2,7 @@ Components
 ^^^^^^^^^^
 
 // components: START
-Number of Components: 269 in 188 JAR artifacts (17 deprecated)
+Number of Components: 260 in 188 JAR artifacts (17 deprecated)
 
 [width="100%",cols="4,1,5",options="header"]
 |=======================================================================
@@ -44,41 +44,14 @@ Number of Components: 269 in 188 JAR artifacts (17 deprecated)
 | link:camel-avro/src/main/docs/avro-component.adoc[Avro] (camel-avro) +
 `avro:transport:host:port/messageName` | 2.10 | Working with Apache Avro for data serialization.
 
-| link:camel-aws/src/main/docs/aws-cw-component.adoc[AWS CloudWatch] (camel-aws) +
-`aws-cw:namespace` | 2.11 | The aws-cw component is used for sending metrics to an Amazon CloudWatch.
-
-| link:camel-aws/src/main/docs/aws-ddb-component.adoc[AWS DynamoDB] (camel-aws) +
-`aws-ddb:tableName` | 2.10 | The aws-ddb component is used for storing and retrieving data from Amazon's DynamoDB service.
-
-| link:camel-aws/src/main/docs/aws-ddbstream-component.adoc[AWS DynamoDB Streams] (camel-aws) +
-`aws-ddbstream:tableName` | 2.17 | The aws-ddbstream component is used for working with Amazon DynamoDB Streams.
-
-| link:camel-aws/src/main/docs/aws-ec2-component.adoc[AWS EC2] (camel-aws) +
-`aws-ec2:label` | 2.16 | The aws-ec2 is used for managing Amazon EC2 instances.
-
-| link:camel-aws/src/main/docs/aws-kinesis-component.adoc[AWS Kinesis] (camel-aws) +
-`aws-kinesis:streamName` | 2.17 | The aws-kinesis component is for consuming and producing records from Amazon Kinesis Streams.
-
 | link:camel-aws/src/main/docs/aws-kinesis-firehose-component.adoc[AWS Kinesis Firehose] (camel-aws) +
 `aws-kinesis-firehose:streamName` | 2.19 | The aws-kinesis-firehose component is used for producing Amazon's Kinesis Firehose streams.
-
-| link:camel-aws/src/main/docs/aws-s3-component.adoc[AWS S3 Storage Service] (camel-aws) +
-`aws-s3:bucketNameOrArn` | 2.8 | The aws-s3 component is used for storing and retrieving objecct from Amazon S3 Storage Service.
 
 | link:camel-aws/src/main/docs/aws-ses-component.adoc[AWS Simple Email Service] (camel-aws) +
 `aws-ses:from` | 2.9 | The aws-ses component is used for sending emails with Amazon's SES service.
 
-| link:camel-aws/src/main/docs/aws-sns-component.adoc[AWS Simple Notification System] (camel-aws) +
-`aws-sns:topicNameOrArn` | 2.8 | The aws-sns component is used for sending messages to an Amazon Simple Notification Topic.
-
-| link:camel-aws/src/main/docs/aws-sqs-component.adoc[AWS Simple Queue Service] (camel-aws) +
-`aws-sqs:queueNameOrArn` | 2.6 | The aws-sqs component is used for sending and receiving messages to Amazon's SQS service.
-
 | link:camel-aws/src/main/docs/aws-swf-component.adoc[AWS Simple Workflow] (camel-aws) +
 `aws-swf:type` | 2.13 | The aws-swf component is used for managing workflows from Amazon Simple Workflow.
-
-| link:camel-aws/src/main/docs/aws-sdb-component.adoc[AWS SimpleDB] (camel-aws) +
-`aws-sdb:domainName` | 2.9 | The aws-sdb component is for storing and retrieving data from/to Amazon's SDB service.
 
 | link:camel-azure/src/main/docs/azure-blob-component.adoc[Azure Storage Blob Service] (camel-azure) +
 `azure-blob:containerOrBlobUri` | 2.19 | The azure-blob component is used for storing and retrieving blobs from Azure Storage Blob Service.

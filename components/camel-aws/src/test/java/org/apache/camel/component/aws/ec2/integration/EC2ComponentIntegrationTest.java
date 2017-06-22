@@ -16,23 +16,17 @@
  */
 package org.apache.camel.component.aws.ec2.integration;
 
-<<<<<<< HEAD
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-=======
 import java.util.ArrayList;
 import java.util.Collection;
 
 import com.amazonaws.services.ec2.model.InstanceType;
 
->>>>>>> upstream/master
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.aws.ec2.EC2Constants;
-<<<<<<< HEAD
-=======
 import org.apache.camel.component.aws.ec2.EC2Operations;
->>>>>>> upstream/master
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -41,7 +35,6 @@ import org.junit.Test;
 public class EC2ComponentIntegrationTest extends CamelTestSupport {
     
     @Test
-<<<<<<< HEAD
     public void listDomains() {
         Exchange exchange = template.send("direct:start", new Processor() {
             public void process(Exchange exchange) throws Exception {
@@ -53,7 +46,6 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
         assertNotNull(results);
     }
     
-=======
     public void createAndRunInstancesTest() {
         
         template.send("direct:createAndRun", new Processor() {
@@ -236,20 +228,13 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
         });
     }
 
->>>>>>> upstream/master
     @Override
     protected RouteBuilder createRouteBuilder() throws Exception {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-<<<<<<< HEAD
                 from("direct:start")
                         .to("aws-ec2://DescribeInstances?accessKey=xx&secretKey=yy");
-            }
-        };
-    }
-}
-=======
                 from("direct:createAndRun")
                         .to("aws-ec2://TestDomain?accessKey=xxxx&secretKey=xxxx&operation=createAndRunInstances");
                 from("direct:stop")
@@ -272,4 +257,3 @@ public class EC2ComponentIntegrationTest extends CamelTestSupport {
         };
     }
 }
->>>>>>> upstream/master

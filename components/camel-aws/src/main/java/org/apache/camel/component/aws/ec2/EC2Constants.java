@@ -17,16 +17,6 @@
 package org.apache.camel.component.aws.ec2;
 
 /**
-<<<<<<< HEAD
- * Constants used in Camel AWS EC2 component
- */
-public interface EC2Constants {
-    
-
-    String NEXT_TOKEN = "CamelAwsEC2NextToken";
-    String DESCRIBE_INSTANCES_RESULTS = "CamelAwsEC2DescribeInstanceResults";
-    String OPERATION =  "CamelAwsEC2Operation";;
-=======
  * Constants used in Camel AWS EC2 module
  * 
  */
@@ -47,5 +37,6 @@ public interface EC2Constants {
     String INSTANCES_PLACEMENT      = "CamelAwsEC2InstancesPlacement";
     String INSTANCES_TAGS           = "CamelAwsEC2InstancesTags";
     String SUBNET_ID                = "CamelAwsEC2SubnetId";
->>>>>>> upstream/master
+    String NEXT_TOKEN = "CamelAwsEC2NextToken";
+    String DESCRIBE_INSTANCES_RESULTS = "CamelAwsEC2DescribeInstanceResults";
 }
